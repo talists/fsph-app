@@ -1,51 +1,153 @@
-# Welcome to your Expo app 👋
+# FSPH Hemose App
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Este é um aplicativo React Native criado com Expo que implementa as telas de carregamento, login e cadastro para o sistema FSPH Hemose.
 
-## Get started
+## Funcionalidades Implementadas
 
-1. Install dependencies
+### 1. Telas de Carregamento (Splash Screens)
+- **Splash Screen 1**: Exibe o logo FSPH com animação de fade-in
+- **Splash Screen 2**: Mostra a marca "Gota" com animação de slide e texto "Salvamos a gota"
+- Transição automática entre as telas com animações fluidas
 
+### 2. Tela de Login
+- Campos de email e senha
+- Validação de campos obrigatórios
+- Botão para mostrar/ocultar senha
+- Link "Esqueceu sua senha?"
+- Botão de login com Google (configuração necessária)
+- Link para tela de cadastro
+
+### 3. Tela de Cadastro
+- Campos: Nome Completo, Ano de Nascimento, Email, Senha, Confirmar Senha
+- Validação de campos e confirmação de senha
+- Botões para mostrar/ocultar senhas
+- Botão de cadastro com Google (configuração necessária)
+- Botão voltar para a tela de login
+
+## Tecnologias Utilizadas
+
+- **React Native** com **Expo**
+- **TypeScript**
+- **Expo Router** para navegação
+- **Expo Auth Session** para OAuth
+- **NativeWind** para styling (Tailwind CSS)
+- **React Native Reanimated** para animações
+- **Expo Vector Icons** para ícones
+
+## Como Executar
+
+1. **Instalar dependências:**
    ```bash
    npm install
    ```
 
-2. Start the app
-
+2. **Iniciar o servidor de desenvolvimento:**
    ```bash
-   npx expo start
+   npm start
    ```
 
-In the output, you'll find options to open the app in a
+3. **Executar no dispositivo:**
+   - Escaneie o QR code com o Expo Go (Android) ou Camera (iOS)
+   - Ou pressione `a` para Android, `i` para iOS, `w` para web
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+## Configuração do Google OAuth
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+Para habilitar o login com Google, você precisa:
 
-## Get a fresh project
+### 1. Configurar no Google Cloud Console
 
-When you're ready, run:
+1. Acesse o [Google Cloud Console](https://console.cloud.google.com/)
+2. Crie um novo projeto ou selecione um existente
+3. Ative a API do Google+ ou Google Identity
+4. Vá para "Credenciais" > "Criar credenciais" > "ID do cliente OAuth 2.0"
+5. Configure as URLs de redirecionamento:
+   - Para desenvolvimento: `https://auth.expo.io/@your-username/your-app-slug`
+   - Para produção: configure conforme sua necessidade
 
-```bash
-npm run reset-project
+### 2. Atualizar o código
+
+No arquivo `app/login.tsx`, substitua o método `handleGoogleLogin` por:
+```typescript
+const handleGoogleLogin = async () => {
+  try {
+    const redirectUri = AuthSession.makeRedirectUri({});
+    
+    const request = new AuthSession.AuthRequest({
+      clientId: 'SEU_GOOGLE_CLIENT_ID.googleusercontent.com', // Substitua aqui
+      scopes: ['openid', 'profile', 'email'],
+      redirectUri,
+      responseType: AuthSession.ResponseType.Code,
+    });
+
+    const result = await request.promptAsync({
+      authorizationEndpoint: 'https://accounts.google.com/oauth/authorize',
+    });
+
+    if (result.type === 'success') {
+      // Processar o resultado do login
+      console.log('Login realizado com sucesso:', result);
+      router.push('/(tabs)');
+    }
+  } catch (error) {
+    Alert.alert('Erro', 'Erro ao fazer login com Google');
+  }
+};
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## Estrutura do Projeto
 
-## Learn more
+```
+app/
+├── _layout.tsx          # Layout principal da aplicação
+├── index.tsx            # Redirecionamento para splash1
+├── splash1.tsx          # Primeira tela de carregamento
+├── splash2.tsx          # Segunda tela de carregamento
+├── login.tsx            # Tela de login
+├── register.tsx         # Tela de cadastro
+└── (tabs)/              # Telas principais do app (após login)
+    ├── _layout.tsx
+    ├── index.tsx
+    └── explore.tsx
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+## Fluxo da Aplicação
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+1. **Inicialização**: `index.tsx` → `splash1.tsx`
+2. **Splash 1**: Animação de fade-in → Após 3s vai para `splash2.tsx`
+3. **Splash 2**: Animação de slide → Após 3s vai para `login.tsx`
+4. **Login**: Usuário pode fazer login ou ir para cadastro
+5. **Cadastro**: Usuário pode se cadastrar ou voltar para login
+6. **App Principal**: Após login bem-sucedido, vai para `(tabs)`
 
-## Join the community
+## Customização
 
-Join our community of developers creating universal apps.
+### Cores do Tema
+As cores podem ser customizadas no `tailwind.config.js`:
+```javascript
+theme: {
+  extend: {
+    colors: {
+      primary: {
+        500: '#DC5F5F', // Cor principal (vermelho FSPH)
+        600: '#C54545',
+      },
+      background: {
+        light: '#F8F4F4', // Fundo claro
+        dark: '#2D2D2D',
+      }
+    }
+  },
+}
+```
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## Próximos Passos
 
+1. **Implementar autenticação real** com backend
+2. **Configurar Google OAuth** com credenciais reais
+3. **Adicionar validações mais robustas**
+4. **Implementar recuperação de senha**
+5. **Adicionar testes unitários**
+
+## Licença
+
+Este projeto é propriedade da FSPH Hemose.

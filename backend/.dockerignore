@@ -1,0 +1,10 @@
+# Ignora a pasta de dependências local (o container vai instalar a sua própria)
+node_modules
+
+# NUNCA inclua o arquivo de variáveis de ambiente na imagem
+.env
+
+# Outros arquivos de desenvolvimento
+.git
+.gitignore
+Dockerfile

@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  # Serviço do Backend da Aplicação
+  backend:
+    build: .
+    # NOME ATUALIZADO (mantido)
+    container_name: backend-gota-a-gota-fsph
+    ports:
+      - "3333:3333"
+    volumes:
+      - ./src:/app/src
+    env_file:
+      - ./.env
+    depends_on:
+      - db
+      - cache
+    command: npm run dev
+
+  # Serviço do Banco de Dados
+  db:
+    image: mysql:8.0
+    # NOME REVERTIDO para o anterior
+    container_name: gota-a-gota-db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: ${DB_DATABASE}
+    ports:
+      - "3306:3306"
+    volumes:
+      - db-data:/var/lib/mysql
+
+  # Serviço de Cache
+  cache:
+    image: redis:alpine
+    # NOME REVERTIDO para o anterior
+    container_name: gota-a-gota-redis
+    restart: always
+    ports:
+      - "6379:6379"
+
+volumes:
+  db-data:
+

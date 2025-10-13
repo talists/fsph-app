@@ -1,0 +1,8 @@
+# Arquivo de variáveis de ambiente
+.env
+
+# Dependências
+node_modules/
+
+# firebase credentials
+/src/config/firebase-service-account.json

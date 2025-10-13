@@ -1,0 +1,22 @@
+# Arquivos dotenv
+.env
+/backend/.env
+/frontend/.env
+
+# Firebase credentials
+/backend/src/config/firebase-service-account.json
+
+# Dependências 
+/backend/node_modules/
+/frontend/node_modules/
+
+# Pastas de build do Frontend
+/frontend/build/
+/frontend/dist/
+/frontend/.next/
+
+# Logs e arquivos de sistema
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db

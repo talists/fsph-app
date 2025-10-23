@@ -2,28 +2,6 @@
 
 Este é um aplicativo React Native criado com Expo que implementa as telas de carregamento, login e cadastro para o sistema FSPH Hemose.
 
-## Funcionalidades Implementadas
-
-### 1. Telas de Carregamento (Splash Screens)
-- **Splash Screen 1**: Exibe o logo FSPH com animação de fade-in
-- **Splash Screen 2**: Mostra a marca "Gota" com animação de slide e texto "Salvamos a gota"
-- Transição automática entre as telas com animações fluidas
-
-### 2. Tela de Login
-- Campos de email e senha
-- Validação de campos obrigatórios
-- Botão para mostrar/ocultar senha
-- Link "Esqueceu sua senha?"
-- Botão de login com Google (configuração necessária)
-- Link para tela de cadastro
-
-### 3. Tela de Cadastro
-- Campos: Nome Completo, Ano de Nascimento, Email, Senha, Confirmar Senha
-- Validação de campos e confirmação de senha
-- Botões para mostrar/ocultar senhas
-- Botão de cadastro com Google (configuração necessária)
-- Botão voltar para a tela de login
-
 ## Tecnologias Utilizadas
 
 - **React Native** com **Expo**
@@ -149,5 +127,6 @@ theme: {
 5. **Adicionar testes unitários**
 
 ## Licença
+
 
 Este projeto é propriedade da FSPH Hemose.

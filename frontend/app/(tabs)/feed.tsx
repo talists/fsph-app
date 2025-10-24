@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import * as ImagePicker from "expo-image-picker";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -14,6 +15,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  ImageSourcePropType,
 } from "react-native";
 
 interface Post {
@@ -24,9 +26,75 @@ interface Post {
     url_foto_perfil?: string;
   };
   legenda: string;
-  url_imagem: string;
+  url_imagem: string | ImageSourcePropType;
   criado_em: string;
 }
+
+// Componente separado para o post
+const PostItem = React.memo(
+  ({
+    item,
+    onImageError,
+  }: {
+    item: Post;
+    onImageError: (id: number) => void;
+  }) => {
+    const [imageError, setImageError] = useState(false);
+
+    const handleImageError = () => {
+      console.log("Erro ao carregar imagem:", item.url_imagem);
+      setImageError(true);
+      onImageError(item.id);
+    };
+
+    const handleImageLoad = () => {
+      console.log("Imagem carregada com sucesso:", item.url_imagem);
+    };
+
+    return (
+      <View style={styles.postCard}>
+        <View style={styles.postHeader}>
+          <Ionicons
+            name="person-circle-outline"
+            size={40}
+            color="#666"
+            style={styles.avatar}
+          />
+          <View style={styles.userInfo}>
+            <Text style={styles.username}>{item.usuario.nome}</Text>
+            <Text style={styles.postTime}>
+              {new Date(item.criado_em).toLocaleDateString("pt-BR")}
+            </Text>
+          </View>
+        </View>
+
+        {item.legenda && (
+          <Text style={styles.postDescription}>{item.legenda}</Text>
+        )}
+
+        {!imageError ? (
+          <Image
+            source={
+              typeof item.url_imagem === "string"
+                ? { uri: item.url_imagem }
+                : item.url_imagem
+            }
+            style={styles.postImage}
+            resizeMode="cover"
+            onError={handleImageError}
+            onLoad={handleImageLoad}
+          />
+        ) : (
+          <View style={[styles.postImage, styles.imageErrorContainer]}>
+            <Ionicons name="heart" size={40} color="#E73645" />
+            <Text style={styles.imageErrorText}>Foto da doação</Text>
+            <Text style={styles.imageErrorSubtext}>Imagem não disponível</Text>
+          </View>
+        )}
+      </View>
+    );
+  }
+);
 
 export default function FeedScreen() {
   const router = useRouter();
@@ -35,6 +103,10 @@ export default function FeedScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
   const [description, setDescription] = useState("");
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [imageErrors, setImageErrors] = useState<{ [key: number]: boolean }>(
+    {}
+  );
 
   // Mock data para demonstração
   const mockPosts: Post[] = [
@@ -42,7 +114,7 @@ export default function FeedScreen() {
       id: 1,
       usuario: { id: 1, nome: "Maria Silva" },
       legenda: "Doei sangue hoje no Hemose! Cada gota conta! 🩸❤️",
-      url_imagem: "https://via.placeholder.com/400x300",
+      url_imagem: require("../../assets/images/doacao_1.jpeg"),
       criado_em: new Date().toISOString(),
     },
     {
@@ -50,8 +122,15 @@ export default function FeedScreen() {
       usuario: { id: 2, nome: "João Santos" },
       legenda:
         "Primeira doação do ano! Sensação incrível de ajudar outras pessoas.",
-      url_imagem: "https://via.placeholder.com/400x300",
+      url_imagem: require("../../assets/images/doacao_2.jpeg"),
       criado_em: new Date().toISOString(),
+    },
+    {
+      id: 3,
+      usuario: { id: 3, nome: "Ana Costa" },
+      legenda: "10ª doação! Orgulhosa de poder ajudar quem precisa 💪❤️",
+      url_imagem: require("../../assets/images/doacao_3.jpeg"),
+      criado_em: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
     },
   ];
 
@@ -80,9 +159,95 @@ export default function FeedScreen() {
     loadFeed(true);
   };
 
+  const selectImage = async () => {
+    try {
+      // Solicitar permissões
+      const permissionResult =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (permissionResult.granted === false) {
+        Alert.alert(
+          "Permissão necessária",
+          "É necessário permitir o acesso à galeria para selecionar uma foto."
+        );
+        return;
+      }
+
+      // Mostrar opções de seleção
+      Alert.alert("Selecionar Foto", "Escolha uma opção:", [
+        {
+          text: "Galeria",
+          onPress: () => pickImageFromGallery(),
+        },
+        {
+          text: "Câmera",
+          onPress: () => pickImageFromCamera(),
+        },
+        {
+          text: "Cancelar",
+          style: "cancel",
+        },
+      ]);
+    } catch (error) {
+      console.error("Erro ao solicitar permissões:", error);
+      Alert.alert("Erro", "Erro ao acessar a galeria");
+    }
+  };
+
+  const pickImageFromGallery = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled) {
+        setSelectedImage(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error("Erro ao selecionar imagem da galeria:", error);
+      Alert.alert("Erro", "Erro ao selecionar imagem da galeria");
+    }
+  };
+
+  const pickImageFromCamera = async () => {
+    try {
+      const permissionResult =
+        await ImagePicker.requestCameraPermissionsAsync();
+
+      if (permissionResult.granted === false) {
+        Alert.alert(
+          "Permissão necessária",
+          "É necessário permitir o acesso à câmera para tirar uma foto."
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled) {
+        setSelectedImage(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error("Erro ao tirar foto:", error);
+      Alert.alert("Erro", "Erro ao tirar foto");
+    }
+  };
+
   const handleSubmitPost = async () => {
     if (!description.trim()) {
       Alert.alert("Atenção", "Por favor, adicione uma descrição");
+      return;
+    }
+
+    if (!selectedImage) {
+      Alert.alert("Atenção", "Por favor, selecione uma foto da sua doação");
       return;
     }
 
@@ -92,12 +257,13 @@ export default function FeedScreen() {
         id: posts.length + 1,
         usuario: { id: 1, nome: "Você" },
         legenda: description.trim(),
-        url_imagem: "https://via.placeholder.com/400x300",
+        url_imagem: selectedImage,
         criado_em: new Date().toISOString(),
       };
 
       setPosts([newPost, ...posts]);
       setDescription("");
+      setSelectedImage(null);
       setUploadModalVisible(false);
 
       Alert.alert("Sucesso", "Post criado com sucesso!");
@@ -106,29 +272,13 @@ export default function FeedScreen() {
     }
   };
 
-  const renderPost = ({ item }: { item: Post }) => (
-    <View style={styles.postCard}>
-      <View style={styles.postHeader}>
-        <Ionicons
-          name="person-circle-outline"
-          size={40}
-          color="#666"
-          style={styles.avatar}
-        />
-        <Text style={styles.username}>{item.usuario.nome}</Text>
-      </View>
+  const renderPost = ({ item }: { item: Post }) => {
+    const handleImageError = (postId: number) => {
+      setImageErrors((prev) => ({ ...prev, [postId]: true }));
+    };
 
-      {item.legenda && (
-        <Text style={styles.postDescription}>{item.legenda}</Text>
-      )}
-
-      <Image
-        source={{ uri: item.url_imagem }}
-        style={styles.postImage}
-        resizeMode="cover"
-      />
-    </View>
-  );
+    return <PostItem item={item} onImageError={handleImageError} />;
+  };
 
   const renderHeader = () => (
     <TouchableOpacity
@@ -198,6 +348,7 @@ export default function FeedScreen() {
                 onPress={() => {
                   setUploadModalVisible(false);
                   setDescription("");
+                  setSelectedImage(null);
                 }}
               >
                 <Ionicons name="close" size={24} color="#333" />
@@ -206,12 +357,34 @@ export default function FeedScreen() {
 
             {/* Área de seleção de imagem */}
             <View style={styles.imageSelector}>
-              <View style={styles.imagePlaceholder}>
-                <Ionicons name="camera" size={40} color="#999" />
-                <Text style={styles.imagePlaceholderText}>
-                  Toque para selecionar uma foto
-                </Text>
-              </View>
+              <TouchableOpacity
+                style={styles.imagePlaceholder}
+                onPress={selectImage}
+                activeOpacity={0.7}
+              >
+                {selectedImage ? (
+                  <Image
+                    source={{ uri: selectedImage }}
+                    style={styles.selectedImage}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <>
+                    <Ionicons name="camera" size={40} color="#999" />
+                    <Text style={styles.imagePlaceholderText}>
+                      Toque para selecionar uma foto
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              {selectedImage && (
+                <TouchableOpacity
+                  style={styles.removeImageButton}
+                  onPress={() => setSelectedImage(null)}
+                >
+                  <Text style={styles.removeImageText}>Remover foto</Text>
+                </TouchableOpacity>
+              )}
             </View>
 
             {/* Campo de descrição */}
@@ -261,6 +434,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderBottomWidth: 1,
+    backgroundColor: "#f8dddd",
     borderBottomColor: "#E0E0E0",
   },
   logo: {
@@ -323,10 +497,18 @@ const styles = StyleSheet.create({
   avatar: {
     marginRight: 12,
   },
+  userInfo: {
+    flex: 1,
+  },
   username: {
     fontSize: 16,
     fontWeight: "600",
     color: "#333",
+  },
+  postTime: {
+    fontSize: 12,
+    color: "#999",
+    marginTop: 2,
   },
   postDescription: {
     fontSize: 14,
@@ -338,6 +520,24 @@ const styles = StyleSheet.create({
     width: "100%",
     height: 200,
     borderRadius: 8,
+  },
+  imageErrorContainer: {
+    backgroundColor: "#F5F5F5",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  imageErrorText: {
+    marginTop: 8,
+    fontSize: 14,
+    color: "#E73645",
+    textAlign: "center",
+    fontWeight: "500",
+  },
+  imageErrorSubtext: {
+    marginTop: 4,
+    fontSize: 12,
+    color: "#999",
+    textAlign: "center",
   },
   modalOverlay: {
     flex: 1,
@@ -375,6 +575,21 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: "#E0E0E0",
     borderStyle: "dashed",
+    overflow: "hidden",
+  },
+  selectedImage: {
+    width: "100%",
+    height: "100%",
+  },
+  removeImageButton: {
+    marginTop: 10,
+    padding: 8,
+    alignItems: "center",
+  },
+  removeImageText: {
+    color: "#E73645",
+    fontSize: 14,
+    fontWeight: "500",
   },
   imagePlaceholderText: {
     marginTop: 8,

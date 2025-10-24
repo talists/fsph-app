@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import apiService, { TransformedBloodStock } from "@/services/api";
 
 interface BloodStock {
   tipo: string;
@@ -17,69 +18,66 @@ interface BloodStock {
   status: "Crítico" | "Alerta" | "Ideal";
 }
 
+// Configuration for refresh intervals
+const REFRESH_CONFIG = {
+  AUTO_REFRESH_INTERVAL: parseInt(process.env.EXPO_PUBLIC_BLOOD_STOCK_REFRESH_INTERVAL || "5") * 60 * 1000, // 5 minutes default
+  CACHE_DURATION: 3 * 60 * 1000, // 3 minutes
+};
+
 export default function HomeScreen() {
   const [bloodStock, setBloodStock] = useState<BloodStock[]>([]);
   const [loading, setLoading] = useState(true);
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isConnected, setIsConnected] = useState<boolean | null>(null);
 
   useEffect(() => {
+    checkAPIConnection();
     fetchBloodStock();
+    
+    // Auto refresh based on configuration
+    const interval = setInterval(() => {
+      fetchBloodStock(true); // Silent refresh
+    }, REFRESH_CONFIG.AUTO_REFRESH_INTERVAL);
+
+    return () => clearInterval(interval);
   }, []);
 
-  const fetchBloodStock = async () => {
+  const checkAPIConnection = async () => {
     try {
-      const response = await fetch(
-        "https://api.fsph.se.gov.br/apiinterface/estoque"
-      );
+      const connected = await apiService.healthCheck();
+      setIsConnected(connected);
+      console.log(`🌐 API Connection: ${connected ? "✅ Connected" : "❌ Disconnected"}`);
+    } catch (error) {
+      setIsConnected(false);
+      console.log("🌐 API Connection: ❌ Failed to check");
+    }
+  };
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
+  const fetchBloodStock = async (silent: boolean = false) => {
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
 
-      const data = await response.json();
-      console.log("Dados da API:", data);
+    try {
+      console.log(`🩸 Fetching blood stock using API service`);
+      
+      const transformedData = await apiService.getBloodStock();
+      console.log("✅ Blood stock data received:", transformedData);
 
-      let stockData: BloodStock[] = [];
+      setBloodStock(transformedData);
+      setLastUpdate(new Date());
+      setError(null);
 
-      // Tratar diferentes formatos possíveis da API
-      if (Array.isArray(data)) {
-        // Se for um array
-        stockData = data.map((item: any) => ({
-          tipo: item.tipo || item.bloodType || item.type || "N/A",
-          nivel: String(
-            item.nivel || item.level || item.quantidade || item.qty || "0"
-          ),
-          status: getStatusFromLevel(
-            String(
-              item.nivel || item.level || item.quantidade || item.qty || "0"
-            )
-          ),
-        }));
-      } else if (typeof data === "object" && data !== null) {
-        // Se for um objeto com propriedades
-        stockData = Object.entries(data).map(
-          ([bloodType, info]: [string, any]) => {
-            let nivel = "0";
+    } catch (error: any) {
+      console.error("❌ Error fetching blood stock:", error);
+      setError(error.message);
 
-            if (typeof info === "object" && info !== null) {
-              nivel = String(
-                info.nivel || info.level || info.quantidade || info.qty || "0"
-              );
-            } else if (typeof info === "string" || typeof info === "number") {
-              nivel = String(info);
-            }
-
-            return {
-              tipo: bloodType,
-              nivel: nivel,
-              status: getStatusFromLevel(nivel),
-            };
-          }
-        );
-      }
-
-      // Se não conseguiu processar ou está vazio, usar dados de exemplo
-      if (stockData.length === 0) {
-        stockData = [
+      // Use fallback data only if no data exists
+      if (bloodStock.length === 0) {
+        console.log("🔄 Using fallback data due to error");
+        setBloodStock([
           { tipo: "O-", nivel: "5", status: "Crítico" },
           { tipo: "A+", nivel: "15", status: "Alerta" },
           { tipo: "O+", nivel: "25", status: "Ideal" },
@@ -88,25 +86,12 @@ export default function HomeScreen() {
           { tipo: "B-", nivel: "12", status: "Alerta" },
           { tipo: "AB+", nivel: "18", status: "Ideal" },
           { tipo: "AB-", nivel: "6", status: "Crítico" },
-        ];
+        ]);
       }
-
-      setBloodStock(stockData);
-    } catch (error) {
-      console.error("Erro ao buscar estoque de sangue:", error);
-      // Dados de exemplo em caso de erro
-      setBloodStock([
-        { tipo: "O-", nivel: "5", status: "Crítico" },
-        { tipo: "A+", nivel: "15", status: "Alerta" },
-        { tipo: "O+", nivel: "25", status: "Ideal" },
-        { tipo: "B+", nivel: "30", status: "Ideal" },
-        { tipo: "A-", nivel: "8", status: "Crítico" },
-        { tipo: "B-", nivel: "12", status: "Alerta" },
-        { tipo: "AB+", nivel: "18", status: "Ideal" },
-        { tipo: "AB-", nivel: "6", status: "Crítico" },
-      ]);
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   };
 
@@ -117,6 +102,24 @@ export default function HomeScreen() {
     if (levelNum < 10) return "Crítico";
     if (levelNum < 20) return "Alerta";
     return "Ideal";
+  };
+
+  const formatLastUpdate = (date: Date): string => {
+    const now = new Date();
+    const diffMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60));
+    
+    if (diffMinutes < 1) return "Agora mesmo";
+    if (diffMinutes < 60) return `${diffMinutes} min atrás`;
+    
+    const diffHours = Math.floor(diffMinutes / 60);
+    if (diffHours < 24) return `${diffHours}h atrás`;
+    
+    return date.toLocaleDateString("pt-BR", {
+      day: "2-digit",
+      month: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   };
 
   const getStatusColor = (status: string) => {
@@ -181,9 +184,25 @@ export default function HomeScreen() {
             style={styles.logo}
             resizeMode="contain"
           />
-          <TouchableOpacity style={styles.notificationIcon}>
-            <Ionicons name="notifications-outline" size={24} color="#666" />
-          </TouchableOpacity>
+          <View style={styles.headerRightContainer}>
+            {/* API Connection Status */}
+            {isConnected !== null && (
+              <View style={styles.connectionStatus}>
+                <View
+                  style={[
+                    styles.connectionDot,
+                    { backgroundColor: isConnected ? "#00CC44" : "#FF4444" },
+                  ]}
+                />
+                <Text style={styles.connectionText}>
+                  {isConnected ? "Online" : "Offline"}
+                </Text>
+              </View>
+            )}
+            <TouchableOpacity style={styles.notificationButton}>
+              <Ionicons name="notifications-outline" size={24} color="#333" />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Menu Icons */}
@@ -248,26 +267,83 @@ export default function HomeScreen() {
         {/* Seção Estoque De Sangue */}
         <View style={styles.bloodStockSection}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Estoque de Sangue</Text>
+            <View style={styles.sectionTitleContainer}>
+              <Text style={styles.sectionTitle}>Estoque de Sangue</Text>
+              {lastUpdate && (
+                <Text style={styles.lastUpdateText}>
+                  Atualizado: {formatLastUpdate(lastUpdate)}
+                </Text>
+              )}
+            </View>
             <TouchableOpacity
-              style={styles.refreshButton}
-              onPress={() => {
-                setLoading(true);
-                fetchBloodStock();
-              }}
+              style={[styles.refreshButton, loading && styles.refreshButtonDisabled]}
+              onPress={() => fetchBloodStock()}
+              disabled={loading}
             >
-              <Ionicons name="refresh" size={20} color="#FF4444" />
+              <Ionicons 
+                name="refresh" 
+                size={20} 
+                color={loading ? "#CCC" : "#FF4444"} 
+                style={loading ? styles.rotatingIcon : undefined}
+              />
             </TouchableOpacity>
           </View>
 
-          {loading ? (
-            <Text style={styles.loadingText}>Carregando estoque...</Text>
-          ) : (
-            <View style={styles.bloodGrid}>
-              {bloodStock.map((item, index) => (
-                <BloodTypeCard key={index} item={item} />
-              ))}
+          {error && (
+            <View style={styles.errorContainer}>
+              <Ionicons name="warning-outline" size={16} color="#FF6B35" />
+              <Text style={styles.errorText}>{error}</Text>
+              <TouchableOpacity
+                style={styles.retryButton}
+                onPress={() => fetchBloodStock()}
+              >
+                <Text style={styles.retryButtonText}>Tentar novamente</Text>
+              </TouchableOpacity>
             </View>
+          )}
+
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <Text style={styles.loadingText}>Carregando estoque...</Text>
+              <View style={styles.loadingDots}>
+                <View style={[styles.dot, styles.dot1]} />
+                <View style={[styles.dot, styles.dot2]} />
+                <View style={[styles.dot, styles.dot3]} />
+              </View>
+            </View>
+          ) : (
+            <>
+              <View style={styles.bloodGrid}>
+                {bloodStock.map((item, index) => (
+                  <BloodTypeCard key={index} item={item} />
+                ))}
+              </View>
+              
+              {/* Blood Stock Summary */}
+              <View style={styles.stockSummary}>
+                <Text style={styles.stockSummaryTitle}>Resumo do Estoque</Text>
+                <View style={styles.stockSummaryRow}>
+                  <View style={styles.statusCount}>
+                    <View style={[styles.statusDot, { backgroundColor: "#FF4444" }]} />
+                    <Text style={styles.statusCountText}>
+                      Crítico: {bloodStock.filter(item => item.status === "Crítico").length}
+                    </Text>
+                  </View>
+                  <View style={styles.statusCount}>
+                    <View style={[styles.statusDot, { backgroundColor: "#FF8800" }]} />
+                    <Text style={styles.statusCountText}>
+                      Alerta: {bloodStock.filter(item => item.status === "Alerta").length}
+                    </Text>
+                  </View>
+                  <View style={styles.statusCount}>
+                    <View style={[styles.statusDot, { backgroundColor: "#00CC44" }]} />
+                    <Text style={styles.statusCountText}>
+                      Ideal: {bloodStock.filter(item => item.status === "Ideal").length}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            </>
           )}
         </View>
 
@@ -324,29 +400,41 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    backgroundColor: "#E8E8E8",
-    padding: 20,
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E0E0E0",
+    backgroundColor: "#f8dddd",
   },
   logo: {
     height: 40,
-    flex: 1,
-    marginRight: 20,
+    width: 120,
   },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#333",
+  headerRightContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
   },
-  headerSubtitle: {
-    fontSize: 18,
+  connectionStatus: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  connectionDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  connectionText: {
+    fontSize: 10,
     color: "#666",
-    marginLeft: -50,
+    fontWeight: "500",
   },
-  notificationIcon: {
-    padding: 5,
+  notificationButton: {
+    padding: 8,
   },
   menuContainer: {
     flexDirection: "row",
@@ -439,8 +527,106 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 15,
   },
+  sectionTitleContainer: {
+    flex: 1,
+  },
+  lastUpdateText: {
+    fontSize: 12,
+    color: "#888",
+    marginTop: 2,
+  },
   refreshButton: {
     padding: 5,
+  },
+  refreshButtonDisabled: {
+    opacity: 0.5,
+  },
+  rotatingIcon: {
+    transform: [{ rotate: "360deg" }],
+  },
+  errorContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFF5F5",
+    padding: 10,
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: "#FF6B35",
+    marginBottom: 15,
+    gap: 8,
+  },
+  errorText: {
+    flex: 1,
+    fontSize: 14,
+    color: "#FF6B35",
+  },
+  retryButton: {
+    backgroundColor: "#FF6B35",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 5,
+  },
+  retryButtonText: {
+    color: "white",
+    fontSize: 12,
+    fontWeight: "bold",
+  },
+  loadingContainer: {
+    alignItems: "center",
+    padding: 20,
+  },
+  loadingDots: {
+    flexDirection: "row",
+    justifyContent: "center",
+    marginTop: 10,
+    gap: 4,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#FF4444",
+  },
+  dot1: {
+    opacity: 1,
+  },
+  dot2: {
+    opacity: 0.7,
+  },
+  dot3: {
+    opacity: 0.4,
+  },
+  stockSummary: {
+    marginTop: 15,
+    padding: 12,
+    backgroundColor: "#F8F9FA",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#E9ECEF",
+  },
+  stockSummaryTitle: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 8,
+  },
+  stockSummaryRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  statusCount: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  statusCountText: {
+    fontSize: 12,
+    color: "#666",
   },
   loadingText: {
     textAlign: "center",

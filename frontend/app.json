@@ -31,6 +31,13 @@
     "plugins": [
       "expo-router",
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "A aplicação precisa acessar suas fotos para que você possa compartilhar imagens de suas doações.",
+          "cameraPermission": "A aplicação precisa acessar sua câmera para que você possa tirar fotos de suas doações."
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-icon.png",

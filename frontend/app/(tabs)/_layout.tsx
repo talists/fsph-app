@@ -37,9 +37,9 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "Benefícios",
+          title: "Home",
           tabBarIcon: ({ color }) => (
-            <Ionicons name="gift-outline" size={24} color={color} />
+            <Ionicons name="home-outline" size={24} color={color} />
           ),
         }}
       />
@@ -55,9 +55,9 @@ export default function TabLayout() {
       <Tabs.Screen
         name="explore"
         options={{
-          title: "Home",
+          title: "Benefícios",
           tabBarIcon: ({ color }) => (
-            <Ionicons name="home-outline" size={24} color={color} />
+            <Ionicons name="gift-outline" size={24} color={color} />
           ),
         }}
       />

@@ -53,6 +53,15 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="doar"
+        options={{
+          title: "Doar",
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="water-outline" size={24} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="explore"
         options={{
           title: "Benefícios",

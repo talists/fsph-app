@@ -12,9 +12,25 @@ Este é um aplicativo React Native criado com Expo que implementa as telas de ca
 - **React Native Reanimated** para animações
 - **Expo Vector Icons** para ícones
 
+## Configurando o Ambiente Local para Expo Go
+
+Para que o aplicativo (rodando no seu celular com Expo Go) possa se comunicar com o servidor da API (rodando no seu computador). É preciso usar o endereço de IP da sua máquina na rede local.
+
+**Passo 1: Crie o arquivo `.env`**
+
+Na raiz da pasta `frontend`, crie um novo arquivo chamado `.env`.
+
+**Passo 2: Adicione a URL da API**
+
+Dentro do arquivo `.env`, adicione a seguinte linha, substituindo `SEU_IP_LOCAL` pelo endereço de IP real da sua máquina:
+
+```
+EXPO_PUBLIC_API_URL=http://SEU_IP_LOCAL:3333/api
+```
+
 ## Como Executar
 
-1. **Instalar dependências:**
+1. **Instalar Dependências:**
    ```bash
    npm install
    ```
@@ -27,6 +43,7 @@ Este é um aplicativo React Native criado com Expo que implementa as telas de ca
 3. **Executar no dispositivo:**
    - Escaneie o QR code com o Expo Go (Android) ou Camera (iOS)
    - Ou pressione `a` para Android, `i` para iOS, `w` para web
+
 
 ## Configuração do Google OAuth
 

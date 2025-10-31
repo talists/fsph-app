@@ -138,6 +138,121 @@ class APIService {
   }
 
   /**
+   * HEMOSE specific endpoints (prefix: https://api.fsph.se.gov.br)
+   * These mirror the backend routes you provided and are kept separate
+   * from the main `baseURL` used elsewhere in the app.
+   */
+  private hemonseBase() {
+    return "https://api.fsph.se.gov.br";
+  }
+
+  async getDoadorInfo(cpf: string): Promise<any> {
+    const url = `${this.hemonseBase()}/apiagendamento/doador/getinfo/${encodeURIComponent(
+      cpf
+    )}`;
+    const res = await this.fetchWithTimeout(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  }
+
+  async getDoadorAgendamentos(cpf: string): Promise<any> {
+    const url = `${this.hemonseBase()}/apiagendamento/doador/agendamentos/${encodeURIComponent(
+      cpf
+    )}`;
+    const res = await this.fetchWithTimeout(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  }
+
+  async getCidades(perm_individual = 1, perm_medula = 1, perm_campanha = 1): Promise<any> {
+    const url = `${this.hemonseBase()}/apiagendamento/cidades/${perm_individual}/${perm_medula}/${perm_campanha}`;
+    const res = await this.fetchWithTimeout(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  }
+
+  async getLocal(id_cidade: string | number, perm_individual = 1, perm_medula = 1, perm_campanha = 1): Promise<any> {
+    const url = `${this.hemonseBase()}/apiagendamento/local/${id_cidade}/${perm_individual}/${perm_medula}/${perm_campanha}`;
+    const res = await this.fetchWithTimeout(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  }
+
+  async getBlocoAllDate(id_local: string | number, perm_individual = 1, perm_medula = 1, perm_campanha = 1): Promise<any> {
+    const url = `${this.hemonseBase()}/apiagendamento/blocoagendamento/listarAllDate/${id_local}/${perm_individual}/${perm_medula}/${perm_campanha}`;
+    const res = await this.fetchWithTimeout(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  }
+
+  async getBlocoByDate(dateSelected: string, id_local: string | number, perm_individual = 1, perm_medula = 1, perm_campanha = 1): Promise<any> {
+    const url = `${this.hemonseBase()}/apiagendamento/blocoagendamento/listarByDate/${encodeURIComponent(
+      dateSelected
+    )}/${id_local}/${perm_individual}/${perm_medula}/${perm_campanha}`;
+    const res = await this.fetchWithTimeout(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  }
+
+  async postMarcarAgendamento(payload: Record<string, any>): Promise<any> {
+    const url = `${this.hemonseBase()}/apiagendamento/agendamento/marcar`;
+    // The backend expects form-data with possible file upload; accept either FormData or JSON
+    const options: RequestInit = {};
+    if (payload instanceof FormData) {
+      options.method = 'POST';
+      options.body = payload as any;
+      // fetchWithTimeout will set JSON headers; avoid overwriting for FormData
+      (options.headers as any) = {};
+    } else {
+      options.method = 'POST';
+      options.body = JSON.stringify(payload);
+    }
+
+    const res = await this.fetchWithTimeout(url, options);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  }
+
+  async postMarcarCampanha(payload: Record<string, any>): Promise<any> {
+    const url = `${this.hemonseBase()}/apiagendamento/campanha/marcar`;
+    const options: RequestInit = {
+      method: 'POST',
+      body: payload instanceof FormData ? (payload as any) : JSON.stringify(payload),
+    };
+    if (payload instanceof FormData) {
+      (options.headers as any) = {};
+    }
+    const res = await this.fetchWithTimeout(url, options);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  }
+
+  async patchEditarAgendamento(payload: Record<string, any>): Promise<any> {
+    const url = `${this.hemonseBase()}/apiagendamento/agendamento/editar`;
+    const options: RequestInit = {};
+    if (payload instanceof FormData) {
+      options.method = 'PATCH';
+      options.body = payload as any;
+      (options.headers as any) = {};
+    } else {
+      options.method = 'PATCH';
+      options.body = JSON.stringify(payload);
+    }
+    const res = await this.fetchWithTimeout(url, options);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  }
+
+  async deleteDesmarcar(protocolo: string | number): Promise<any> {
+    const url = `${this.hemonseBase()}/apiagendamento/agendamento/desmarcar/${encodeURIComponent(
+      protocolo
+    )}`;
+    const res = await this.fetchWithTimeout(url, { method: 'DELETE' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  }
+
+  /**
    * Get API base URL for debugging
    */
   getBaseURL(): string {

@@ -1,4 +1,4 @@
-package com.anonymous.fsph_test
+package com.lauroaug.fsph_test
 
 import android.app.Application
 import android.content.res.Configuration

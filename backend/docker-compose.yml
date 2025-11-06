@@ -1,45 +1,69 @@
-version: '3.8'
-
+# A linha 'version' foi removida por ser obsoleta
 services:
   # Serviço do Backend da Aplicação
   backend:
     build: .
-    # NOME ATUALIZADO (mantido)
     container_name: backend-gota-a-gota-fsph
     ports:
-      - "3333:3333"
+      # Porta externa 3334 (para o seu PC) -> porta interna 3333 (no contentor)
+      - "3334:3333"
     volumes:
       - ./src:/app/src
     env_file:
       - ./.env
     depends_on:
-      - db
-      - cache
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
     command: npm run dev
 
   # Serviço do Banco de Dados
   db:
     image: mysql:8.0
-    # NOME REVERTIDO para o anterior
     container_name: gota-a-gota-db
     restart: always
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
       MYSQL_DATABASE: ${DB_DATABASE}
     ports:
-      - "3306:3306"
+      # Porta externa 3307 (para o seu PC) -> porta interna 3306 (no contentor)
+      - "3307:3306"
     volumes:
-      - db-data:/var/lib/mysql
+      - db-data-clone:/var/lib/mysql
+    # ADICIONADO: Verificação de saúde para o MySQL
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mysqladmin",
+          "ping",
+          "-h",
+          "localhost",
+          "-u",
+          "root",
+          "-p${DB_PASSWORD}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s # Dá 30s para o MySQL arrancar antes de começar a testar
 
   # Serviço de Cache
   cache:
     image: redis:alpine
-    # NOME REVERTIDO para o anterior
     container_name: gota-a-gota-redis
     restart: always
     ports:
-      - "6379:6379"
+      # Porta externa 6380 (para o seu PC) -> porta interna 6379 (no contentor)
+      - "6380:6379"
+    # ADICIONADO: Verificação de saúde para o Redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
+# Define o volume nomeado para o banco de dados
 volumes:
   db-data:
-

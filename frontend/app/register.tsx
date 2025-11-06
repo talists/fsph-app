@@ -1,7 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import * as AuthSession from "expo-auth-session";
 import { useRouter } from "expo-router";
-import * as WebBrowser from "expo-web-browser";
 import React, { useState } from "react";
 import {
   Alert,
@@ -11,73 +9,147 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Image,
+  ActivityIndicator,
+  Platform
 } from "react-native";
-import { GOOGLE_OAUTH_CONFIG } from "../config/auth";
-
-WebBrowser.maybeCompleteAuthSession();
+// Importa o nosso hook de autenticação
+import { useAuth } from "../contexts/AuthContext"; 
+// Importa o seletor de imagens
+import * as ImagePicker from 'expo-image-picker';
 
 export default function RegisterScreen() {
   const router = useRouter();
-  const [fullName, setFullName] = useState("");
-  const [birthYear, setBirthYear] = useState("");
+  // Obtém a função de registo do nosso contexto
+  const { register } = useAuth(); 
+  
+  // --- Estados do Formulário Alinhados com o Backend ---
+  const [nome, setNome] = useState("");
+  const [cpf, setCpf] = useState("");
+  const [dataNascimento, setDataNascimento] = useState(""); // Utilizador digita DD/MM/AAAA
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
+  const [senha, setSenha] = useState("");
+  const [confirmacaoSenha, setConfirmacaoSenha] = useState("");
+  // Estado para guardar a imagem selecionada
+  const [image, setImage] = useState<ImagePicker.ImagePickerAsset | null>(null);
+  // -----------------------------------------------------
+
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleRegister = () => {
-    if (!fullName || !birthYear || !email || !password || !confirmPassword) {
-      Alert.alert("Erro", "Por favor, preencha todos os campos");
+  // --- Função para escolher imagem da GALERIA ---
+  const pickImageFromGallery = async () => {
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (permissionResult.granted === false) {
+      Alert.alert("Permissão necessária", "É preciso permissão para aceder à galeria.");
       return;
     }
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1], // Quadrado para foto de perfil
+      quality: 0.5, // Comprime a imagem
+    });
+    if (!result.canceled) {
+      setImage(result.assets[0]);
+    }
+  };
 
-    if (password !== confirmPassword) {
+  // --- Nova função para a CÂMARA ---
+  const pickImageFromCamera = async () => {
+    const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+    if (permissionResult.granted === false) {
+      Alert.alert("Permissão necessária", "É preciso permissão para aceder à câmara.");
+      return;
+    }
+    let result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.5,
+    });
+    if (!result.canceled) {
+      setImage(result.assets[0]);
+    }
+  };
+
+  // --- Nova função "principal" para escolher ---
+  const selectImage = () => {
+    Alert.alert(
+      "Selecionar Foto de Perfil",
+      "Escolha uma opção:",
+      [
+        { text: "Tirar Foto", onPress: pickImageFromCamera },
+        { text: "Escolher da Galeria", onPress: pickImageFromGallery },
+        { text: "Cancelar", style: "cancel" },
+      ]
+    );
+  };
+
+  /**
+   * Converte uma data de DD/MM/AAAA para AAAA-MM-DD.
+   */
+  const formatInputDateToISO = (dateString: string) => {
+    const cleaned = dateString.replace(/[^0-9/]/g, '');
+    const parts = cleaned.split('/');
+    if (parts.length === 3) {
+      const [dia, mes, ano] = parts;
+      if (ano.length === 4) {
+        return `${ano}-${mes}-${dia}`;
+      }
+    }
+    return dateString; 
+  };
+
+  const handleRegister = async () => {
+    if (!nome || !email || !senha || !confirmacaoSenha || !cpf || !dataNascimento) {
+      Alert.alert("Erro", "Por favor, preencha todos os campos obrigatórios");
+      return;
+    }
+    if (!image) {
+      Alert.alert("Erro", "A foto de perfil é obrigatória para o registo.");
+      return;
+    }
+    if (senha !== confirmacaoSenha) {
       Alert.alert("Erro", "As senhas não coincidem");
       return;
     }
+    
+    setIsLoading(true);
 
-    if (password.length < 6) {
-      Alert.alert("Erro", "A senha deve ter pelo menos 6 caracteres");
-      return;
-    }
-
-    // Navegar diretamente para a home após cadastro
-    router.replace("/(tabs)");
-  };
-
-  const handleGoogleRegister = async () => {
     try {
-      const redirectUri = AuthSession.makeRedirectUri({});
+      const formData = new FormData();
+      const dataNascimentoISO = formatInputDateToISO(dataNascimento);
 
-      const request = new AuthSession.AuthRequest({
-        clientId: GOOGLE_OAUTH_CONFIG.clientId,
-        scopes: GOOGLE_OAUTH_CONFIG.scopes,
-        redirectUri,
-        responseType: AuthSession.ResponseType.Code,
-      });
+      formData.append('nome', nome);
+      formData.append('email', email);
+      formData.append('cpf', cpf);
+      formData.append('senha', senha);
+      formData.append('confirmacaoSenha', confirmacaoSenha);
+      formData.append('data_nascimento', dataNascimentoISO);
 
-      const discovery = await AuthSession.fetchDiscoveryAsync(
-        "https://accounts.google.com"
-      );
+      const fileData = {
+        uri: image.uri,
+        name: image.fileName || `photo_${Date.now()}.jpg`,
+        type: image.mimeType || 'image/jpeg',
+      };
+      formData.append('url_foto_perfil', fileData as any);
 
-      const result = await request.promptAsync(discovery);
+      await register(formData);
+      
+      // A linha do Alert.alert("Sucesso"...) foi REMOVIDA daqui.
+      // O _layout.tsx irá agora tratar do redirecionamento.
 
-      if (result.type === "success") {
-        Alert.alert("Sucesso", "Cadastro com Google realizado com sucesso!", [
-          { text: "OK", onPress: () => router.push("/(tabs)") },
-        ]);
-      } else {
-        Alert.alert("Erro", "Cadastro cancelado pelo usuário");
-      }
-    } catch (error) {
-      console.error("Erro no Google Register:", error);
-      Alert.alert("Erro", "Erro inesperado ao fazer cadastro com Google");
+    } catch (error: any) {
+      console.error("Erro no Registo:", error);
+      Alert.alert("Erro no Registo", error.message || "Não foi possível criar a conta");
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 50 }}>
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
@@ -89,30 +161,62 @@ export default function RegisterScreen() {
       </View>
 
       <View style={styles.form}>
+        
+        {/* --- CAMPO DE UPLOAD DE FOTO (MODIFICADO) --- */}
+        <View style={styles.inputContainer}>
+          <Text style={styles.label}>Foto de Perfil (Obrigatória)</Text>
+          <TouchableOpacity style={styles.imagePicker} onPress={selectImage} disabled={isLoading}>
+            {image ? (
+              <Image source={{ uri: image.uri }} style={styles.profileImage} />
+            ) : (
+              <Ionicons name="camera" size={30} color="#9CA3AF" />
+            )}
+            <Text style={styles.imagePickerText}>
+              {image ? "Trocar foto" : "Escolher foto"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Campo Nome Completo */}
         <View style={styles.inputContainer}>
           <Text style={styles.label}>Nome Completo</Text>
           <TextInput
             style={styles.input}
             placeholder="Seu nome"
             placeholderTextColor="#9CA3AF"
-            value={fullName}
-            onChangeText={setFullName}
+            value={nome}
+            onChangeText={setNome}
           />
         </View>
-
+        
+        {/* Campo CPF */}
         <View style={styles.inputContainer}>
-          <Text style={styles.label}>Ano de Nascimento</Text>
+          <Text style={styles.label}>CPF</Text>
           <TextInput
             style={styles.input}
-            placeholder="Ex: 1990"
+            placeholder="000.000.000-00"
             placeholderTextColor="#9CA3AF"
-            value={birthYear}
-            onChangeText={setBirthYear}
+            value={cpf}
+            onChangeText={setCpf}
             keyboardType="numeric"
-            maxLength={4}
+          />
+        </View>
+        
+        {/* Campo Data de Nascimento */}
+        <View style={styles.inputContainer}>
+          <Text style={styles.label}>Data de Nascimento</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Formato DD/MM/AAAA"
+            placeholderTextColor="#9CA3AF"
+            value={dataNascimento}
+            onChangeText={setDataNascimento}
+            keyboardType="numeric"
+            maxLength={10}
           />
         </View>
 
+        {/* Campo Email */}
         <View style={styles.inputContainer}>
           <Text style={styles.label}>Email</Text>
           <TextInput
@@ -126,15 +230,16 @@ export default function RegisterScreen() {
           />
         </View>
 
+        {/* Campo Senha */}
         <View style={styles.inputContainer}>
           <Text style={styles.label}>Senha</Text>
           <View style={styles.passwordContainer}>
             <TextInput
               style={styles.passwordInput}
-              placeholder="Senha"
+              placeholder="Digite sua senha"
               placeholderTextColor="#9CA3AF"
-              value={password}
-              onChangeText={setPassword}
+              value={senha}
+              onChangeText={setSenha}
               secureTextEntry={!showPassword}
             />
             <TouchableOpacity
@@ -150,6 +255,7 @@ export default function RegisterScreen() {
           </View>
         </View>
 
+        {/* Campo Confirmar Senha */}
         <View style={styles.inputContainer}>
           <Text style={styles.label}>Confirmar Senha</Text>
           <View style={styles.passwordContainer}>
@@ -157,8 +263,8 @@ export default function RegisterScreen() {
               style={styles.passwordInput}
               placeholder="Confirme sua senha"
               placeholderTextColor="#9CA3AF"
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
+              value={confirmacaoSenha}
+              onChangeText={setConfirmacaoSenha}
               secureTextEntry={!showConfirmPassword}
             />
             <TouchableOpacity
@@ -177,23 +283,18 @@ export default function RegisterScreen() {
         <TouchableOpacity
           style={styles.registerButton}
           onPress={handleRegister}
+          disabled={isLoading}
         >
-          <Text style={styles.registerButtonText}>Cadastrar</Text>
-        </TouchableOpacity>
-
-        <Text style={styles.orText}>ou</Text>
-
-        <TouchableOpacity
-          style={styles.googleButton}
-          onPress={handleGoogleRegister}
-        >
-          <Ionicons name="logo-google" size={20} color="white" />
-          <Text style={styles.googleButtonText}>Cadastrar com Google</Text>
+          {isLoading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.registerButtonText}>Cadastrar</Text>
+          )}
         </TouchableOpacity>
 
         <View style={styles.loginContainer}>
           <Text style={styles.loginText}>Já tem uma conta? </Text>
-          <TouchableOpacity onPress={() => router.push("/login")}>
+          <TouchableOpacity onPress={() => router.push("/login")} disabled={isLoading}>
             <Text style={styles.loginLink}>Fazer login</Text>
           </TouchableOpacity>
         </View>
@@ -202,6 +303,7 @@ export default function RegisterScreen() {
   );
 }
 
+// O seu StyleSheet original
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -211,16 +313,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 24,
-    paddingTop: 60,
+    paddingTop: Platform.OS === 'android' ? 40 : 60,
     paddingBottom: 20,
   },
   backButton: {
     marginRight: 16,
-  },
-  logo: {
-    width: 80,
-    height: 40,
-    marginRight: 12,
   },
   title: {
     fontSize: 28,
@@ -245,7 +342,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    fontSize: 16,
+    fontSize: 16, 
     borderWidth: 1,
     borderColor: "#E5E7EB",
   },
@@ -280,27 +377,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
   },
-  orText: {
-    textAlign: "center",
-    color: "#6B7280",
-    fontSize: 14,
-    marginBottom: 16,
-  },
-  googleButton: {
-    backgroundColor: "#DC5F5F",
-    borderRadius: 8,
-    paddingVertical: 16,
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "center",
-    marginBottom: 24,
-  },
-  googleButtonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "600",
-    marginLeft: 8,
-  },
   loginContainer: {
     flexDirection: "row",
     justifyContent: "center",
@@ -315,4 +391,31 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
   },
+  imagePicker: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#E5E7EB',
+    justifyContent: 'center',
+    alignItems: 'center',
+    alignSelf: 'center',
+    marginBottom: 10,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#ddd'
+  },
+  profileImage: {
+    width: '100%',
+    height: '100%',
+  },
+  imagePickerText: {
+    position: 'absolute',
+    bottom: 10,
+    color: '#374151',
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    paddingHorizontal: 5,
+    borderRadius: 5,
+    fontSize: 12,
+  },
 });
+

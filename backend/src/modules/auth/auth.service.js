@@ -28,16 +28,24 @@ export class AuthService {
 
     await redisClient.set(`token_usuario_${usuario.id}`, accessToken, { EX: 60 * 15 }); // 15 minutos
 
-    return { 
-        accessToken, 
-        refreshToken, 
-        usuario: { id: usuario.id, nome: usuario.nome, tipo: usuario.tipo } 
-    };
+    // CORREÇÃO: Remove a senha antes de retornar e inclui todos os campos necessários
+    delete usuario.senha;
+    delete usuario.refresh_token;
 
+    return { 
+      accessToken, 
+      refreshToken, 
+      usuario: {
+        id: usuario.id,
+        nome: usuario.nome,
+        email: usuario.email,
+        tipo_sanguineo: usuario.tipo_sanguineo,
+        url_foto_perfil: usuario.url_foto_perfil
+      }
+    };
   }
 
   static async logout(usuarioId) {
-
     await redisClient.del(`token_usuario_${usuarioId}`);
     await AuthRepository.update(usuarioId, { refresh_token: null });
     
@@ -66,40 +74,38 @@ export class AuthService {
   }
 
   static async esqueciSenha(usuarioEmail){
-      const usuario = await AuthRepository.findByEmail(usuarioEmail);
+    const usuario = await AuthRepository.findByEmail(usuarioEmail);
+    
+    if (!usuario) {
+      return { msg: "Se um usuário com este e-mail existir, um link de redefinição foi enviado." };
+    }
+
+    const resetToken = jwt.sign(
+      { id: usuario.id, tipo: 'senha-reset'},
+      JWT_SECRET,
+      { expiresIn: "15m" }
+    );
+
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const resetLink = `${frontendUrl}/resetar-senha?token=${resetToken}`;
+
+    const emailHtml = 
+      `
+        <h1>Redefinição de Senha - Gota a Gota</h1>
+        <p>Olá, ${usuario.nome}!</p>
+        <p>Recebemos uma solicitação para redefinir sua senha. Se foi você, clique no link abaixo para criar uma nova senha:</p>
+        <a href="${resetLink}">Redefinir Minha Senha</a>
+        <p>Este link é válido por 15 minutos.</p>
+        <p>Se você não solicitou isso, por favor, ignore este e-mail.</p>
+      `;
       
-      if (!usuario) {
-        
-        return { msg: "Se um usuário com este e-mail existir, um link de redefinição foi enviado." };
-        
-      }
+    await sendEmail({
+      to: usuario.email,
+      subject: 'Redefinição de Senha - Gota a Gota',
+      html: emailHtml,
+    });
 
-      const resetToken = jwt.sign(
-          { id: usuario.id, tipo: 'senha-reset'},
-          JWT_SECRET,
-          { expiresIn: "15m" }
-        );
-
-      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000'; // Aqui vai a url do app no frontend
-      const resetLink = `${frontendUrl}/resetar-senha?token=${resetToken}`;
-
-      const emailHtml = 
-            `
-              <h1>Redefinição de Senha - Gota a Gota</h1>
-              <p>Olá, ${usuario.nome}!</p>
-              <p>Recebemos uma solicitação para redefinir sua senha. Se foi você, clique no link abaixo para criar uma nova senha:</p>
-              <a href="${resetLink}">Redefinir Minha Senha</a>
-              <p>Este link é válido por 15 minutos.</p>
-              <p>Se você не solicitou isso, por favor, ignore este e-mail.</p>
-            `;
-            
-          await sendEmail({
-              to: usuario.email,
-              subject: 'Redefinição de Senha - Gota a Gota',
-              html: emailHtml,
-          });
-
-        return { msg: "Se um usuário com este e-mail existir, um link de redefinição foi enviado." };
+    return { msg: "Se um usuário com este e-mail existir, um link de redefinição foi enviado." };
   }
 
   static async alterarSenha(usuarioId, senhaAtual, novaSenha) {
@@ -117,5 +123,4 @@ export class AuthService {
 
     return { msg: "Senha alterada com sucesso" };
   }
-
 }

@@ -36,7 +36,10 @@ import postoColetaRoutes from "./src/modules/postoscoleta/postocoleta.routes.js"
 const app = express();
 
 // Middlewares essenciais
-app.use(cors()); // Habilita o CORS para todas as rotas
+app.use(cors({
+  origin: '*', // ou especifique o IP do seu dispositivo
+  credentials: true
+}));
 app.use(helmet()); // Adiciona cabeçalhos de segurança
 app.use(express.json()); // Habilita o parsing de JSON no corpo das requisições
 

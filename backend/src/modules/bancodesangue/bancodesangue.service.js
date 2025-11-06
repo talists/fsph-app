@@ -9,7 +9,7 @@ const API_BASE_URL = process.env.FSPH_API_URL || "https://api.fsph.se.gov.br/api
 export class BancoDeSangueService {
   
   static async updateCache(data) {
-    await redisClient.set("estoque_banco_sangue", JSON.stringify(data), "EX", 3600);
+    await redisClient.set("estoque_banco_sangue", JSON.stringify(data), { "EX" : 3600 });
   }
 
   static async fetchFromAPI() {

@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback, useContext } from "react";
 import {
   Alert,
   Image,
@@ -9,43 +9,40 @@ import {
   Text,
   TouchableOpacity,
   View,
+  ActivityIndicator, // Importado para o ecrã de loading
+  RefreshControl, // Importado para o "puxar para atualizar"
 } from "react-native";
-import apiService, { TransformedBloodStock } from "@/services/api";
+import { Link } from 'expo-router'; // Importado para o link do alerta
+import { apiService } from "@/services/api"; 
+import { bancoDeSangueService, TransformedBloodStock } from "@/services/bancoDeSangue.service";
+import { useAuth } from "@/contexts/AuthContext";
+// ---------------------------------
 
-interface BloodStock {
-  tipo: string;
-  nivel: string;
-  status: "Crítico" | "Alerta" | "Ideal";
-}
+type BloodStock = TransformedBloodStock;
 
-// Configuration for refresh intervals
 const REFRESH_CONFIG = {
   AUTO_REFRESH_INTERVAL: parseInt(process.env.EXPO_PUBLIC_BLOOD_STOCK_REFRESH_INTERVAL || "5") * 60 * 1000, // 5 minutes default
-  CACHE_DURATION: 3 * 60 * 1000, // 3 minutes
 };
 
 export default function HomeScreen() {
   const [bloodStock, setBloodStock] = useState<BloodStock[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState<boolean | null>(null);
 
-  useEffect(() => {
-    checkAPIConnection();
-    fetchBloodStock();
-    
-    // Auto refresh based on configuration
-    const interval = setInterval(() => {
-      fetchBloodStock(true); // Silent refresh
-    }, REFRESH_CONFIG.AUTO_REFRESH_INTERVAL);
-
-    return () => clearInterval(interval);
-  }, []);
+  // Estados para o alerta personalizado
+  const [showStockAlert, setShowStockAlert] = useState(false);
+  const [criticalType, setCriticalType] = useState<string | null>(null);
+  
+  // Acede aos dados do utilizador autenticado
+  const { user } = useAuth(); 
 
   const checkAPIConnection = async () => {
     try {
-      const connected = await apiService.healthCheck();
+      // CORREÇÃO: Chama o healthCheck do apiService central
+      const connected = await apiService.healthCheck(); 
       setIsConnected(connected);
       console.log(`🌐 API Connection: ${connected ? "✅ Connected" : "❌ Disconnected"}`);
     } catch (error) {
@@ -54,96 +51,99 @@ export default function HomeScreen() {
     }
   };
 
-  const fetchBloodStock = async (silent: boolean = false) => {
-    if (!silent) {
-      setLoading(true);
-      setError(null);
-    }
+  const fetchBloodStock = async (isRefresh = false) => {
+    if (!isRefresh && loading) return; // Evita chamadas duplicadas
+    
+    if (!isRefresh) setLoading(true);
+    setRefreshing(true);
+    setError(null);
+    setShowStockAlert(false);
 
     try {
       console.log(`🩸 Fetching blood stock using API service`);
       
-      const transformedData = await apiService.getBloodStock();
+      // CORREÇÃO: Chama o serviço modular correto
+      const transformedData = await bancoDeSangueService.getBloodStock();
       console.log("✅ Blood stock data received:", transformedData);
 
       setBloodStock(transformedData);
       setLastUpdate(new Date());
       setError(null);
 
+      // --- LÓGICA DE VERIFICAÇÃO DE ALERTA (ADICIONADA) ---
+      if (user && user.tipo_sanguineo) {
+        const userBloodType = user.tipo_sanguineo;
+        const userStockInfo = transformedData.find(item => item.tipo === userBloodType);
+
+        // Verifica se o tipo do utilizador está em alerta ou crítico
+        if (userStockInfo && (userStockInfo.status === 'Crítico' || userStockInfo.status === 'Alerta')) {
+          setShowStockAlert(true);
+          setCriticalType(userBloodType);
+        }
+      }
+      // --- FIM DA LÓGICA DE ALERTA ---
+
     } catch (error: any) {
       console.error("❌ Error fetching blood stock:", error);
       setError(error.message);
-
-      // Use fallback data only if no data exists
-      if (bloodStock.length === 0) {
-        console.log("🔄 Using fallback data due to error");
-        setBloodStock([
-          { tipo: "O-", nivel: "5", status: "Crítico" },
-          { tipo: "A+", nivel: "15", status: "Alerta" },
-          { tipo: "O+", nivel: "25", status: "Ideal" },
-          { tipo: "B+", nivel: "30", status: "Ideal" },
-          { tipo: "A-", nivel: "8", status: "Crítico" },
-          { tipo: "B-", nivel: "12", status: "Alerta" },
-          { tipo: "AB+", nivel: "18", status: "Ideal" },
-          { tipo: "AB-", nivel: "6", status: "Crítico" },
-        ]);
-      }
     } finally {
-      if (!silent) {
-        setLoading(false);
-      }
+      if (!isRefresh) setLoading(false);
+      setRefreshing(false);
     }
   };
 
-  const getStatusFromLevel = (
-    nivel: string
-  ): "Crítico" | "Alerta" | "Ideal" => {
-    const levelNum = parseInt(nivel);
-    if (levelNum < 10) return "Crítico";
-    if (levelNum < 20) return "Alerta";
-    return "Ideal";
-  };
+  // Carrega os dados na primeira vez e re-carrega se o utilizador mudar
+  useEffect(() => {
+    if(user) { // Só carrega os dados se o utilizador estiver autenticado
+      checkAPIConnection();
+      loadFeed();
+      
+      const interval = setInterval(() => {
+        fetchBloodStock(true); // Silent refresh
+      }, REFRESH_CONFIG.AUTO_REFRESH_INTERVAL);
 
+      return () => clearInterval(interval);
+    }
+  }, [user]); // Depende do 'user' para re-executar
+
+  // Função para o "puxar para atualizar"
+  const onRefresh = useCallback(() => {
+    fetchBloodStock(true);
+  }, [user]); // Adiciona 'user' como dependência
+  
+  const loadFeed = useCallback(() => {
+    fetchBloodStock(false);
+  }, [user]); // Adiciona 'user' como dependência
+
+  // Funções de formatação e estilo (o seu código original, está perfeito)
   const formatLastUpdate = (date: Date): string => {
-    const now = new Date();
-    const diffMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60));
-    
-    if (diffMinutes < 1) return "Agora mesmo";
-    if (diffMinutes < 60) return `${diffMinutes} min atrás`;
-    
-    const diffHours = Math.floor(diffMinutes / 60);
-    if (diffHours < 24) return `${diffHours}h atrás`;
-    
-    return date.toLocaleDateString("pt-BR", {
-      day: "2-digit",
-      month: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+     const now = new Date();
+     const diffMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60));
+     if (diffMinutes < 1) return "Agora mesmo";
+     if (diffMinutes < 60) return `${diffMinutes} min atrás`;
+     const diffHours = Math.floor(diffMinutes / 60);
+     if (diffHours < 24) return `${diffHours}h atrás`;
+     return date.toLocaleDateString("pt-BR", { hour: "2-digit", minute: "2-digit" });
   };
 
   const getStatusColor = (status: string) => {
-    switch (status) {
-      case "Crítico":
-        return "#FF4444";
-      case "Alerta":
-        return "#FF8800";
-      case "Ideal":
-        return "#00CC44";
-      default:
-        return "#666";
-    }
+     switch (status) {
+       case "Crítico": return "#FF4444";
+       case "Alerta": return "#FF8800";
+       case "Ideal": return "#00CC44";
+       default: return "#666";
+     }
   };
+  
+  const getStatusBorderStyle = (status: "Crítico" | "Alerta" | "Ideal"): object => {
+    switch (status) {
+      case 'Crítico': return { borderLeftColor: '#DC5F5F' };
+      case 'Alerta': return { borderLeftColor: '#FBBF24' };
+      default: return { borderLeftColor: '#10B981' };
+    }
+  }
 
-  const MenuItem = ({
-    icon,
-    title,
-    onPress,
-  }: {
-    icon: string;
-    title: string;
-    onPress: () => void;
-  }) => (
+  const MenuItem = ({ icon, title, onPress }: { icon: string; title: string; onPress: () => void; }) => (
     <TouchableOpacity style={styles.menuItem} onPress={onPress}>
       <View style={styles.menuIconContainer}>
         <Ionicons name={icon as any} size={24} color="#666" />
@@ -153,7 +153,7 @@ export default function HomeScreen() {
   );
 
   const BloodTypeCard = ({ item }: { item: BloodStock }) => (
-    <View style={styles.bloodCard}>
+    <View style={[styles.bloodCard, getStatusBorderStyle(item.status)]}>
       <View style={styles.bloodDropContainer}>
         <Ionicons
           name="water"
@@ -174,9 +174,19 @@ export default function HomeScreen() {
     </View>
   );
 
+  // Ecrã Principal
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.scrollView}>
+      <ScrollView 
+        style={styles.scrollView}
+        refreshControl={
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={onRefresh} 
+            colors={["#FF4444"]}
+          />
+        }
+      >
         {/* Header */}
         <View style={styles.header}>
           <Image
@@ -185,7 +195,6 @@ export default function HomeScreen() {
             resizeMode="contain"
           />
           <View style={styles.headerRightContainer}>
-            {/* API Connection Status */}
             {isConnected !== null && (
               <View style={styles.connectionStatus}>
                 <View
@@ -205,42 +214,49 @@ export default function HomeScreen() {
           </View>
         </View>
 
+        {/* --- COMPONENTE DE ALERTA VISUAL (ADICIONADO) --- */}
+        {showStockAlert && criticalType && (
+          <View style={styles.alertBox}>
+            <Text style={styles.alertTitle}>🚨 Atenção Doador {criticalType}!</Text>
+            <Text style={styles.alertText}>
+              Os estoques do seu tipo sanguíneo estão baixos. A sua doação é muito importante agora!
+            </Text>
+            {/* O Link do 'expo-router' permite a navegação */}
+            <Link href="/(tabs)/doar" asChild>
+              <TouchableOpacity>
+                <Text style={styles.alertLink}>Agendar Doação</Text>
+              </TouchableOpacity>
+            </Link>
+          </View>
+        )}
+        {/* ------------------------------------ */}
+
         {/* Menu Icons */}
         <View style={styles.menuContainer}>
           <MenuItem
             icon="card-outline"
             title="Cartão do Doador"
-            onPress={() =>
-              Alert.alert("Em desenvolvimento", "Funcionalidade em breve!")
-            }
+            onPress={() => Alert.alert("Em desenvolvimento")}
           />
           <MenuItem
             icon="heart-outline"
             title="Controle de Medula"
-            onPress={() =>
-              Alert.alert("Em desenvolvimento", "Funcionalidade em breve!")
-            }
+            onPress={() => Alert.alert("Em desenvolvimento")}
           />
           <MenuItem
             icon="bar-chart-outline"
             title="Histórico"
-            onPress={() =>
-              Alert.alert("Em desenvolvimento", "Funcionalidade em breve!")
-            }
+            onPress={() => Alert.alert("Em desenvolvimento")}
           />
           <MenuItem
             icon="person-outline"
             title="Perfil"
-            onPress={() =>
-              Alert.alert("Em desenvolvimento", "Funcionalidade em breve!")
-            }
+            onPress={() => Alert.alert("Em desenvolvimento")}
           />
           <MenuItem
             icon="help-circle-outline"
             title="FAQ"
-            onPress={() =>
-              Alert.alert("Em desenvolvimento", "Funcionalidade em breve!")
-            }
+            onPress={() => Alert.alert("Em desenvolvimento")}
           />
         </View>
 
@@ -276,15 +292,14 @@ export default function HomeScreen() {
               )}
             </View>
             <TouchableOpacity
-              style={[styles.refreshButton, loading && styles.refreshButtonDisabled]}
-              onPress={() => fetchBloodStock()}
-              disabled={loading}
+              style={[styles.refreshButton, refreshing && styles.refreshButtonDisabled]}
+              onPress={onRefresh}
+              disabled={refreshing}
             >
               <Ionicons 
                 name="refresh" 
                 size={20} 
-                color={loading ? "#CCC" : "#FF4444"} 
-                style={loading ? styles.rotatingIcon : undefined}
+                color={refreshing ? "#CCC" : "#FF4444"} 
               />
             </TouchableOpacity>
           </View>
@@ -295,23 +310,14 @@ export default function HomeScreen() {
               <Text style={styles.errorText}>{error}</Text>
               <TouchableOpacity
                 style={styles.retryButton}
-                onPress={() => fetchBloodStock()}
+                onPress={() => fetchBloodStock(false)} // Tenta novamente com loading
               >
                 <Text style={styles.retryButtonText}>Tentar novamente</Text>
               </TouchableOpacity>
             </View>
           )}
 
-          {loading ? (
-            <View style={styles.loadingContainer}>
-              <Text style={styles.loadingText}>Carregando estoque...</Text>
-              <View style={styles.loadingDots}>
-                <View style={[styles.dot, styles.dot1]} />
-                <View style={[styles.dot, styles.dot2]} />
-                <View style={[styles.dot, styles.dot3]} />
-              </View>
-            </View>
-          ) : (
+          {!error && (
             <>
               <View style={styles.bloodGrid}>
                 {bloodStock.map((item, index) => (
@@ -319,7 +325,6 @@ export default function HomeScreen() {
                 ))}
               </View>
               
-              {/* Blood Stock Summary */}
               <View style={styles.stockSummary}>
                 <Text style={styles.stockSummaryTitle}>Resumo do Estoque</Text>
                 <View style={styles.stockSummaryRow}>
@@ -351,9 +356,7 @@ export default function HomeScreen() {
         <View style={styles.actionButtonsContainer}>
           <TouchableOpacity
             style={[styles.actionButton, { backgroundColor: "#FF4444" }]}
-            onPress={() =>
-              Alert.alert("Em desenvolvimento", "Funcionalidade em breve!")
-            }
+            onPress={() => Alert.alert("Em desenvolvimento")}
           >
             <Ionicons name="heart" size={20} color="white" />
             <Text style={styles.actionButtonText}>
@@ -363,9 +366,7 @@ export default function HomeScreen() {
 
           <TouchableOpacity
             style={[styles.actionButton, { backgroundColor: "#FF4444" }]}
-            onPress={() =>
-              Alert.alert("Em desenvolvimento", "Funcionalidade em breve!")
-            }
+            onPress={() => Alert.alert("Em desenvolvimento")}
           >
             <Ionicons name="calendar" size={20} color="white" />
             <Text style={styles.actionButtonText}>
@@ -378,8 +379,7 @@ export default function HomeScreen() {
         <View style={styles.hemoseSection}>
           <Text style={styles.sectionTitle}>Funcionamento do HEMOSE</Text>
           <View style={styles.hemoseSchedule}>
-            <Text style={styles.hemoseDay}>De Segunda</Text>
-            <Text style={styles.hemoseDay}>à Sexta</Text>
+            <Text style={styles.hemoseDay}>De Segunda à Sexta</Text>
             <Text style={styles.hemoseHours}>7:30 - 17:00</Text>
             <Text style={styles.hemoseNote}>
               Podendo variar em finais de semana ou feriados
@@ -391,10 +391,17 @@ export default function HomeScreen() {
   );
 }
 
+// O seu StyleSheet original (com as correções de estilo)
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#F5F5F5",
+  },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
   },
   scrollView: {
     flex: 1,
@@ -542,7 +549,7 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   rotatingIcon: {
-    transform: [{ rotate: "360deg" }],
+    // A animação de rotação pode ser adicionada aqui
   },
   errorContainer: {
     flexDirection: "row",
@@ -649,6 +656,7 @@ const styles = StyleSheet.create({
     padding: 8,
     marginBottom: 10,
     backgroundColor: "#FAFAFA",
+    borderLeftWidth: 5, // Adicionado para consistência
   },
   bloodDropContainer: {
     alignItems: "center",
@@ -678,6 +686,7 @@ const styles = StyleSheet.create({
   actionButtonsContainer: {
     paddingHorizontal: 15,
     gap: 10,
+    marginTop: 5, // Adicionado espaçamento
   },
   actionButton: {
     flexDirection: "row",
@@ -724,4 +733,35 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 5,
   },
+  // NOVOS ESTILOS PARA O ALERTA (movidos do ficheiro anterior)
+  alertLink: {
+    color: '#007AFF',
+    fontWeight: 'bold',
+    marginTop: 10,
+  },
+  alertBox: {
+    backgroundColor: '#FFFBEB',
+    padding: 16,
+    borderRadius: 8,
+    marginVertical: 16,
+    marginHorizontal: 24,
+    borderLeftWidth: 5,
+    borderLeftColor: '#FBBF24',
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  alertTitle: {
+    fontWeight: 'bold',
+    fontSize: 16,
+    color: '#D97706',
+    marginBottom: 5,
+  },
+  alertText: {
+    fontSize: 14,
+    color: '#B45309',
+  },
 });
+

@@ -1,110 +1,136 @@
 import * as AuthSession from "expo-auth-session";
 import * as WebBrowser from "expo-web-browser";
+import { atob } from "react-native-quick-base64";
 
 WebBrowser.maybeCompleteAuthSession();
 
-// Configuração do Google OAuth para Expo
-// IMPORTANTE: Substitua pelo seu Client ID real do Google Cloud Console
-// Este é um exemplo - você precisa configurar um projeto no Google Cloud Console
 const GOOGLE_CLIENT_ID =
-  "419445008906-jmbevfpdbu7s2iveqki47hgb6n8jtaso.apps.googleusercontent.com";
+  "896137778307-t4bcdk08adqg0461kouik4mh6bg840c1.apps.googleusercontent.com"; // SEU ID ANDROID
+const GOOGLE_SCOPES = ["openid", "profile", "email"];
 
-// Configure o Google Sign-In para Expo
+const REDIRECT_URI =
+  "fsphtest://expo-development-client/?url=https://u.expo.dev/9252855c-c9a7-426a-8cb9-4b174dad82f3?channel-name=main";
+
+export interface GoogleSignInResult {
+  success: boolean;
+  idToken?: string;
+  user?: {
+    id: string;
+    name: string;
+    email: string;
+    photo?: string;
+  };
+  error?: string;
+}
+
 export const configureGoogleSignIn = () => {
-  // Para Expo Go, não precisamos de configuração prévia
-  console.log("Google Sign-In configurado para Expo");
+  console.log("🔐 Google Sign-In configurado para Expo (Modo Nativo)");
 };
 
-// Função para fazer login com Google usando AuthSession (compatível com Expo Go)
-export const signInWithGoogle = async () => {
-  try {
-    // URI local para desenvolvimento que o Google aceita
-    const redirectUri = "http://localhost:19006/auth";
+export const signInWithGoogle = async (): Promise<GoogleSignInResult> => {
+  if (!GOOGLE_CLIENT_ID) {
+    console.error(
+      "❌ Erro de Configuração: GOOGLE_CLIENT_ID não está definido."
+    );
+    return { success: false, error: "Erro de configuração do cliente Google." };
+  }
 
-    console.log("Redirect URI:", redirectUri);
+  try {
+    console.log("🚀 Iniciando login com Google (Nativo)...");
+    console.log("📍 Redirect URI:", REDIRECT_URI);
+
+    const nonce = Math.random().toString(36).substring(2, 15);
+    console.log("🔑 Usando Nonce:", nonce);
 
     const request = new AuthSession.AuthRequest({
-      clientId: GOOGLE_CLIENT_ID,
-      scopes: ["openid", "profile", "email"],
-      redirectUri,
-      responseType: AuthSession.ResponseType.Code,
-      extraParams: {},
+      clientId: GOOGLE_CLIENT_ID, // ID Android
+      scopes: GOOGLE_SCOPES,
+      redirectUri: REDIRECT_URI, // URI do Dev Client
+      responseType: AuthSession.ResponseType.IdToken,
+      usePKCE: false, // O fluxo nativo Android geralmente não usa PKCE
+      extraParams: {
+        nonce: nonce,
+      },
     });
 
     const discovery = await AuthSession.fetchDiscoveryAsync(
       "https://accounts.google.com"
     );
 
-    const result = await request.promptAsync(discovery);
+    console.log("🔍 Endpoints descobertos. Abrindo navegador...");
 
+    /**
+     * ✅ CORREÇÃO 3: O proxy é DESLIGADO (removido)
+     */
+    const result = await request.promptAsync(discovery); // Sem { useProxy: true }
+
+    // ... (o resto do arquivo de tratamento de erro e token é o mesmo) ...
+    // ...
     if (result.type === "success") {
-      // Aqui você pode trocar o código por um token de acesso
-      const { code } = result.params;
-
-      // Para este exemplo, vamos simular um usuário logado
-      const mockUser = {
-        id: "123456789",
-        name: "Usuário de Teste",
-        email: "usuario@teste.com",
-        photo: "https://via.placeholder.com/150",
+      console.log("✅ Login com Google bem-sucedido!");
+      const idToken = result.params?.id_token;
+      if (!idToken) {
+        console.error("❌ id_token não encontrado na resposta");
+        return {
+          success: false,
+          error: "Token de autenticação não recebido",
+        };
+      }
+      const tokenParts = idToken.split(".");
+      let userInfo = null;
+      if (tokenParts.length === 3) {
+        try {
+          const payload = JSON.parse(atob(tokenParts[1]));
+          userInfo = {
+            id: payload.sub,
+            name: payload.name || "",
+            email: payload.email || "",
+            photo: payload.picture || undefined,
+          };
+          console.log("👤 Informações do usuário extraídas:", userInfo.email);
+        } catch (e) {
+          console.warn("⚠️ Não foi possível decodificar o token", e);
+        }
+      }
+      return {
+        success: true,
+        idToken: idToken,
+        user: userInfo || undefined,
       };
-
-      return { success: true, user: mockUser };
-    } else {
-      return { success: false, error: "Login cancelado pelo usuário" };
     }
-  } catch (error) {
-    console.error("Erro no login com Google:", error);
-
-    // Tratamento específico para erros de OAuth
-    const errorMessage = (error as any)?.message || "";
-
-    if (
-      errorMessage.includes("invalid_request") ||
-      errorMessage.includes("redirect_uri")
-    ) {
+    if (result.type === "cancel") {
+      console.log("ℹ️ Login cancelado pelo usuário");
+      return { success: false, error: "Login cancelado" };
+    }
+    if (result.type === "error") {
+      console.error("❌ Erro na autenticação:", result.error);
       return {
         success: false,
-        error:
-          "Erro de configuração OAuth. Verifique o arquivo URGENTE_GOOGLE_OAUTH_FIX.md para instruções detalhadas.",
+        error: result.error?.message || "Erro na autenticação",
       };
     }
-
-    if (errorMessage.includes("Authorization Error")) {
-      return {
-        success: false,
-        error:
-          "URI de redirecionamento não autorizado. Configure no Google Cloud Console conforme instruções no arquivo URGENTE_GOOGLE_OAUTH_FIX.md.",
-      };
-    }
-
+    console.warn("⚠️ Login falhou:", result.type);
+    return { success: false, error: "Falha na autenticação" };
+  } catch (error: any) {
+    console.error("❌ Erro no login com Google:", error);
     return {
       success: false,
-      error: `Erro no login com Google: ${errorMessage || "Erro desconhecido"}`,
+      error: `Erro ao fazer login: ${error?.message || "Erro desconhecido"}`,
     };
   }
 };
 
-// Função para fazer logout
-export const signOutFromGoogle = async () => {
+export const signOutFromGoogle = async (): Promise<{ success: boolean }> => {
   try {
-    // Para AuthSession, não há logout específico
-    // Você pode limpar o cache do WebBrowser se necessário
     await WebBrowser.dismissBrowser();
+    console.log("✅ Logout do Google realizado");
     return { success: true };
   } catch (error) {
-    console.error("Erro no logout:", error);
-    return { success: false, error: "Erro no logout" };
+    console.error("❌ Erro no logout:", error);
+    return { success: false };
   }
 };
 
-// Função para obter usuário atual
 export const getCurrentUser = async () => {
-  try {
-    // Para este exemplo, retornamos null (usuário não logado)
-    return null;
-  } catch (error) {
-    console.error("Erro ao obter usuário atual:", error);
-    return null;
-  }
+  return null;
 };

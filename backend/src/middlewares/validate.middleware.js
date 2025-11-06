@@ -1,22 +1,27 @@
-// src/middlewares/validate.middleware.js
-import { ZodError } from "zod";
+import { ZodError } from 'zod';
 
-export const validate = (schema) => async (req, res, next) => {
+/**
+ * Middleware que valida o 'req.body' contra um schema Zod.
+ * @param schema O schema Zod a ser validado.
+ */
+export const validateBody = (schema) => async (req, res, next) => {
   try {
-    await schema.parseAsync({
-      body: req.body,
-      query: req.query,
-      params: req.params,
-    });
+    // Valida o req.body diretamente contra o schema "plano"
+    await schema.parseAsync(req.body);
     return next();
   } catch (error) {
-
     if (error instanceof ZodError) {
+      // Formata os erros do Zod para serem fáceis de ler
+      const errors = error.errors.map(e => ({
+        campo: e.path.join('.'),
+        mensagem: e.message,
+      }));
       return res.status(400).json({
         msg: "Erro de validação nos dados enviados.",
-        errors: error.flatten().fieldErrors,
+        errors: errors,
       });
     }
-    next(error);
+    // Se for outro tipo de erro
+    return res.status(500).json({ msg: "Erro interno no servidor." });
   }
 };

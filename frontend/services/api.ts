@@ -1,150 +1,95 @@
-// services/api.ts
-/**
- * API Service for Gota a Gota App
- * Handles all API communications with the backend
- */
+import { tokenStorage } from './tokenStorage';
 
-export interface BloodStockAPIResponse {
-  err: number;
-  data: {
-    grupoabo: string;
-    fatorrh: "P" | "N";
-    situacao: "Critico" | "Alerta" | "Normal";
-    quantidade?: number;
-    percentual?: number;
-  }[];
-}
+const BASE_URL_PADRAO = "http://10.0.2.2:3334/api"; // URL fixa para Android Emulator
 
-export interface TransformedBloodStock {
-  tipo: string;
-  nivel: string;
-  status: "Crítico" | "Alerta" | "Ideal";
-}
+type CustomRequestInit = Omit<RequestInit, 'body'> & {
+  body?: BodyInit | null | Record<string, any>;
+};
 
 class APIService {
   private baseURL: string;
   private timeout: number;
 
-  constructor() {
-    this.baseURL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:3333/api";
-    this.timeout = 10000; // 10 seconds
+  constructor(baseURL = BASE_URL_PADRAO) {
+    this.baseURL = baseURL;
+    this.timeout = 60000; // 60 segundos
+    console.log(`[APIService] Inicializado com a URL base: ${this.baseURL}`);
   }
 
-  /**
-   * Generic fetch wrapper with timeout and error handling
-   */
-  private async fetchWithTimeout(
-    url: string,
-    options: RequestInit = {}
+  async fetch(
+    endpoint: string,
+    options: CustomRequestInit = {},
+    isAuthRequired = true
   ): Promise<Response> {
+    
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
+    const headers = new Headers(options.headers || {});
+    let body: BodyInit | null | undefined = undefined;
+
+    if (options.body) {
+      if (options.body instanceof FormData || typeof options.body === 'string') {
+        body = options.body;
+      } else if (typeof options.body === 'object') {
+        body = JSON.stringify(options.body);
+        if (!headers.has('Content-Type')) {
+          headers.set('Content-Type', 'application/json');
+        }
+      }
+    }
+    
+    if (!headers.has('Accept')) {
+      headers.set('Accept', 'application/json');
+    }
+
+    if (isAuthRequired) {
+      const token = await tokenStorage.getAccessToken();
+      if (token) {
+        headers.set('Authorization', `Bearer ${token}`);
+      }
+    }
+    
+    if (options.body instanceof FormData) {
+      headers.delete('Content-Type');
+    }
+
     try {
-      const response = await fetch(url, {
+      console.log(`[APIService] Chamando: ${options.method || 'GET'} ${this.baseURL}${endpoint}`);
+      const response = await fetch(`${this.baseURL}${endpoint}`, {
         ...options,
+        body,
         signal: controller.signal,
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json",
-          ...options.headers,
-        },
+        headers: headers,
       });
 
       clearTimeout(timeoutId);
       return response;
-    } catch (error) {
-      clearTimeout(timeoutId);
-      throw error;
-    }
-  }
-
-  /**
-   * Get current blood stock from the API
-   */
-  async getBloodStock(): Promise<TransformedBloodStock[]> {
-    try {
-      console.log(`🩸 Fetching blood stock from: ${this.baseURL}/bancodesangue/estoque`);
-
-      const response = await this.fetchWithTimeout(
-        `${this.baseURL}/bancodesangue/estoque`
-      );
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const apiData: BloodStockAPIResponse = await response.json();
-      console.log("📊 API Response:", apiData);
-
-      if (apiData.err !== 0) {
-        throw new Error("API returned error in response");
-      }
-
-      // Transform API data to app format
-      const transformedData: TransformedBloodStock[] = apiData.data.map((item) => {
-        const bloodType = `${item.grupoabo}${item.fatorrh === "P" ? "+" : "-"}`;
-        const nivel = item.quantidade?.toString() || item.percentual?.toString() || "0";
-        
-        let status: "Crítico" | "Alerta" | "Ideal";
-        switch (item.situacao) {
-          case "Critico":
-            status = "Crítico";
-            break;
-          case "Alerta":
-            status = "Alerta";
-            break;
-          default:
-            status = "Ideal";
-        }
-
-        return {
-          tipo: bloodType,
-          nivel: nivel,
-          status: status,
-        };
-      });
-
-      console.log("✅ Transformed data:", transformedData);
-      return transformedData;
-
     } catch (error: any) {
-      console.error("❌ Error fetching blood stock:", error);
-      
-      // Rethrow with more descriptive message
-      if (error.name === "AbortError") {
-        throw new Error("Timeout: Servidor demorou para responder");
-      } else if (error.message.includes("HTTP")) {
-        throw new Error(`Erro do servidor: ${error.message}`);
-      } else if (error.message.includes("fetch")) {
-        throw new Error("Erro de conexão. Verifique sua internet.");
-      } else {
-        throw new Error(error.message || "Erro ao carregar dados");
-      }
+      clearTimeout(timeoutId);
+      throw this.handleError(error);
     }
   }
 
-  /**
-   * Health check endpoint
-   */
+  private handleError(error: any): Error {
+    if (error.name === "AbortError") {
+      return new Error("Timeout: O servidor demorou para responder");
+    }
+    if (error.message.includes("Network request failed")) {
+       return new Error("Erro de conexão: Verifique sua internet ou se a URL da API está correta.");
+    }
+    return error;
+  }
+
   async healthCheck(): Promise<boolean> {
     try {
-      const response = await this.fetchWithTimeout(`${this.baseURL}`);
+      const response = await this.fetch('/', { method: 'GET' }, false); 
       return response.ok;
     } catch (error) {
       console.error("❌ Health check failed:", error);
       return false;
     }
   }
-
-  /**
-   * Get API base URL for debugging
-   */
-  getBaseURL(): string {
-    return this.baseURL;
-  }
 }
 
-// Export singleton instance
 export const apiService = new APIService();
-export default apiService;

@@ -1,4 +1,4 @@
-package com.anonymous.fsph_test
+package com.lauroaug.fsph_test
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build

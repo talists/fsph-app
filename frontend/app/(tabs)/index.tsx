@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
 import {
   Alert,
+  Dimensions,
   Image,
   SafeAreaView,
   ScrollView,
@@ -10,7 +11,13 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { router } from "expo-router";
 import apiService, { TransformedBloodStock } from "@/services/api";
+import DonorCard from '@/components/DonorCard';
+import DonorCardModal from '@/components/DonorCardModal';
+import DonationHistory from '@/components/DonationHistory';
+import { useAuth } from '@/contexts/AuthContext';
+import { Modal } from 'react-native';
 
 interface BloodStock {
   tipo: string;
@@ -30,11 +37,34 @@ export default function HomeScreen() {
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState<boolean | null>(null);
+  const [unreadNotifications, setUnreadNotifications] = useState(3); // Mock count
+  const [fullscreenCardVisible, setFullscreenCardVisible] = useState(false);
+  const [historyModalVisible, setHistoryModalVisible] = useState(false);
+  const { user } = useAuth() as any;
+
+  // Responsive calculations
+  const { width: screenWidth } = Dimensions.get('window');
+  const horizontalPadding = 32; // Total horizontal padding (16px each side from bloodStockSection)
+  const sectionMargin = 30; // Total margin (15px each side from bloodStockSection)
+  const cardSpacing = 8; // Space between cards
+
+  // Determine cards per row based on screen size
+  let cardsPerRow = 4;
+  if (screenWidth < 320) cardsPerRow = 3;      // Very small phones
+  else if (screenWidth < 400) cardsPerRow = 4;  // Regular phones
+  else cardsPerRow = 4;                         // Larger screens
+
+  const availableWidth = screenWidth - horizontalPadding - sectionMargin - (cardSpacing * (cardsPerRow - 1));
+  const calculatedCardWidth = availableWidth / cardsPerRow;
+
+  // Ensure minimum card size for readability
+  const minCardWidth = 70;
+  const cardWidth = Math.max(minCardWidth, calculatedCardWidth);
 
   useEffect(() => {
     checkAPIConnection();
     fetchBloodStock();
-    
+
     // Auto refresh based on configuration
     const interval = setInterval(() => {
       fetchBloodStock(true); // Silent refresh
@@ -62,7 +92,7 @@ export default function HomeScreen() {
 
     try {
       console.log(`🩸 Fetching blood stock using API service`);
-      
+
       const transformedData = await apiService.getBloodStock();
       console.log("✅ Blood stock data received:", transformedData);
 
@@ -107,13 +137,13 @@ export default function HomeScreen() {
   const formatLastUpdate = (date: Date): string => {
     const now = new Date();
     const diffMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60));
-    
+
     if (diffMinutes < 1) return "Agora mesmo";
     if (diffMinutes < 60) return `${diffMinutes} min atrás`;
-    
+
     const diffHours = Math.floor(diffMinutes / 60);
     if (diffHours < 24) return `${diffHours}h atrás`;
-    
+
     return date.toLocaleDateString("pt-BR", {
       day: "2-digit",
       month: "2-digit",
@@ -152,27 +182,46 @@ export default function HomeScreen() {
     </TouchableOpacity>
   );
 
-  const BloodTypeCard = ({ item }: { item: BloodStock }) => (
-    <View style={styles.bloodCard}>
-      <View style={styles.bloodDropContainer}>
-        <Ionicons
-          name="water"
-          size={20}
-          color={getStatusColor(item.status)}
-          style={styles.bloodDropIcon}
-        />
-        <Text style={styles.bloodType}>{item.tipo}</Text>
+  const BloodTypeCard = ({ item }: { item: BloodStock }) => {
+    // Responsive sizing calculations
+    const iconSize = Math.min(Math.max(14, cardWidth * 0.20), 22);
+    const typeFontSize = Math.min(Math.max(11, cardWidth * 0.16), 16);
+    const statusFontSize = Math.min(Math.max(8, cardWidth * 0.10), 11);
+
+    return (
+      <View style={[styles.bloodCard, { width: cardWidth }]}>
+        <View style={styles.bloodDropContainer}>
+          <Ionicons
+            name="water"
+            size={iconSize}
+            color={getStatusColor(item.status)}
+            style={styles.bloodDropIcon}
+          />
+          <Text
+            style={[styles.bloodType, { fontSize: typeFontSize }]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+          >
+            {item.tipo}
+          </Text>
+        </View>
+        <View
+          style={[
+            styles.statusIndicator,
+            { backgroundColor: getStatusColor(item.status) },
+          ]}
+        >
+          <Text
+            style={[styles.statusText, { fontSize: statusFontSize }]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+          >
+            {item.status}
+          </Text>
+        </View>
       </View>
-      <View
-        style={[
-          styles.statusIndicator,
-          { backgroundColor: getStatusColor(item.status) },
-        ]}
-      >
-        <Text style={styles.statusText}>{item.status}</Text>
-      </View>
-    </View>
-  );
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -199,8 +248,26 @@ export default function HomeScreen() {
                 </Text>
               </View>
             )}
-            <TouchableOpacity style={styles.notificationButton}>
+
+            <TouchableOpacity
+              style={styles.profileButton}
+              onPress={() => router.push('/profile')}
+            >
+              <Ionicons name="person-outline" size={24} color="#333" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.notificationButton}
+              onPress={() => router.push('/notifications')}
+            >
               <Ionicons name="notifications-outline" size={24} color="#333" />
+              {unreadNotifications > 0 && (
+                <View style={styles.notificationBadge}>
+                  <Text style={styles.notificationBadgeText}>
+                    {unreadNotifications > 9 ? '9+' : unreadNotifications}
+                  </Text>
+                </View>
+              )}
             </TouchableOpacity>
           </View>
         </View>
@@ -210,9 +277,7 @@ export default function HomeScreen() {
           <MenuItem
             icon="card-outline"
             title="Cartão do Doador"
-            onPress={() =>
-              Alert.alert("Em desenvolvimento", "Funcionalidade em breve!")
-            }
+            onPress={() => setFullscreenCardVisible(true)}
           />
           <MenuItem
             icon="heart-outline"
@@ -224,44 +289,13 @@ export default function HomeScreen() {
           <MenuItem
             icon="bar-chart-outline"
             title="Histórico"
-            onPress={() =>
-              Alert.alert("Em desenvolvimento", "Funcionalidade em breve!")
-            }
-          />
-          <MenuItem
-            icon="person-outline"
-            title="Perfil"
-            onPress={() =>
-              Alert.alert("Em desenvolvimento", "Funcionalidade em breve!")
-            }
+            onPress={() => setHistoryModalVisible(true)}
           />
           <MenuItem
             icon="help-circle-outline"
             title="FAQ"
-            onPress={() =>
-              Alert.alert("Em desenvolvimento", "Funcionalidade em breve!")
-            }
+            onPress={() => router.push('/faq')}
           />
-        </View>
-
-        {/* Campaign Message */}
-        <View style={styles.campaignContainer}>
-          <Image
-            source={require("@/assets/images/medico_24hrs.jpg")}
-            style={styles.doctorImage}
-            resizeMode="cover"
-          />
-          <View style={styles.campaignContentContainer}>
-            <View style={styles.campaignIcon}>
-              <Ionicons name="heart" size={40} color="#FF4444" />
-            </View>
-            <View style={styles.campaignTextContainer}>
-              <Text style={styles.campaignTitle}>
-                Gota por gota, a gente salva vidas.
-              </Text>
-              <Text style={styles.campaignSubtitle}>Junte-se à campanha!</Text>
-            </View>
-          </View>
         </View>
 
         {/* Seção Estoque De Sangue */}
@@ -280,10 +314,10 @@ export default function HomeScreen() {
               onPress={() => fetchBloodStock()}
               disabled={loading}
             >
-              <Ionicons 
-                name="refresh" 
-                size={20} 
-                color={loading ? "#CCC" : "#FF4444"} 
+              <Ionicons
+                name="refresh"
+                size={20}
+                color={loading ? "#CCC" : "#FF4444"}
                 style={loading ? styles.rotatingIcon : undefined}
               />
             </TouchableOpacity>
@@ -318,7 +352,7 @@ export default function HomeScreen() {
                   <BloodTypeCard key={index} item={item} />
                 ))}
               </View>
-              
+
               {/* Blood Stock Summary */}
               <View style={styles.stockSummary}>
                 <Text style={styles.stockSummaryTitle}>Resumo do Estoque</Text>
@@ -345,6 +379,26 @@ export default function HomeScreen() {
               </View>
             </>
           )}
+        </View>
+
+        {/* Campaign Message */}
+        <View style={styles.campaignContainer}>
+          <Image
+            source={require("@/assets/images/medico_24hrs.jpg")}
+            style={styles.doctorImage}
+            resizeMode="cover"
+          />
+          <View style={styles.campaignContentContainer}>
+            <View style={styles.campaignIcon}>
+              <Ionicons name="heart" size={40} color="#FF4444" />
+            </View>
+            <View style={styles.campaignTextContainer}>
+              <Text style={styles.campaignTitle}>
+                Gota por gota, a gente salva vidas.
+              </Text>
+              <Text style={styles.campaignSubtitle}>Junte-se à campanha!</Text>
+            </View>
+          </View>
         </View>
 
         {/* Botão de ações */}
@@ -374,19 +428,116 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Horário do HEMOSE */}
+        {/* Horário do HEMOSE - Versão Completa */}
         <View style={styles.hemoseSection}>
           <Text style={styles.sectionTitle}>Funcionamento do HEMOSE</Text>
-          <View style={styles.hemoseSchedule}>
-            <Text style={styles.hemoseDay}>De Segunda</Text>
-            <Text style={styles.hemoseDay}>à Sexta</Text>
-            <Text style={styles.hemoseHours}>7:30 - 17:00</Text>
-            <Text style={styles.hemoseNote}>
-              Podendo variar em finais de semana ou feriados
-            </Text>
+
+          {/* Cabeçalho com informações gerais */}
+          <View style={styles.horarioHeader}>
+            <View style={styles.horarioHeaderIcon}>
+              <Ionicons name="time-outline" size={28} color="#fff" />
+            </View>
+            <View style={styles.horarioHeaderText}>
+              <Text style={styles.horarioTitle}>Horários de Atendimento</Text>
+              <Text style={styles.horarioSubtitle}>Podendo variar em finais de semana ou feriados</Text>
+            </View>
+          </View>
+
+          {/* Lista de horários */}
+          <View style={styles.horarioList}>
+            {(() => {
+              const hoje = new Date().getDay(); // 0 = Domingo, 1 = Segunda, etc.
+              const diasSemana = [
+                { nome: 'Domingo', horario: 'Fechado', funcionando: false },
+                { nome: 'Segunda-Feira', horario: '07:30 - 17:00', funcionando: true },
+                { nome: 'Terça-Feira', horario: '07:30 - 17:00', funcionando: true },
+                { nome: 'Quarta-Feira', horario: '07:30 - 17:00', funcionando: true },
+                { nome: 'Quinta-Feira', horario: '07:30 - 17:00', funcionando: true },
+                { nome: 'Sexta-Feira', horario: '07:30 - 17:00', funcionando: true },
+                { nome: 'Sábado', horario: 'Fechado', funcionando: false }
+              ];
+
+              return diasSemana.map((dia, index) => {
+                const isToday = index === hoje;
+                const isOpen = dia.funcionando && isToday;
+                const currentTime = new Date();
+                const isCurrentlyOpen = isOpen && currentTime.getHours() >= 7 && currentTime.getHours() < 17;
+
+                return (
+                  <View key={dia.nome} style={[
+                    styles.horarioItem,
+                    isToday ? styles.horarioItemToday : null
+                  ]}>
+                    <Text style={[
+                      styles.horarioDia,
+                      isToday ? styles.horarioDiaToday : null,
+                      !dia.funcionando ? styles.horarioDiaFechado : null
+                    ]}>{dia.nome}</Text>
+
+                    <View style={styles.horarioRight}>
+                      {isCurrentlyOpen && (
+                        <View style={styles.hemoseStatusDot} />
+                      )}
+                      <Text style={[
+                        styles.horarioHoras,
+                        isToday ? styles.horarioHorasToday : null,
+                        !dia.funcionando ? styles.horarioHorasFechado : null
+                      ]}>{dia.horario}</Text>
+                      {isCurrentlyOpen && (
+                        <View style={styles.hemoseStatusBadge}>
+                          <Text style={styles.hemoseStatusText}>ABERTO</Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                );
+              });
+            })()}
+          </View>
+
+          {/* Informações de contato */}
+          <View style={styles.hemoseContact}>
+            <View style={styles.contactRow}>
+              <Ionicons name="call" size={16} color="#E73645" />
+              <Text style={styles.contactText}>+55 79 3234-6010</Text>
+            </View>
+            <View style={styles.contactRow}>
+              <Ionicons name="location" size={16} color="#E73645" />
+              <Text style={styles.contactText}>Av. Prof. José Bonifácio Fortes Neto, 400 - Capucho</Text>
+            </View>
           </View>
         </View>
       </ScrollView>
+
+      {/* Fullscreen Card Modal */}
+      <DonorCardModal
+        visible={fullscreenCardVisible}
+        onClose={() => setFullscreenCardVisible(false)}
+        id={user?.id?.toString() || '123456'}
+        name={user?.name || user?.fullName || 'João da Silva Santos'}
+        bloodType={user?.bloodType || user?.blood_type || 'O+'}
+        profileImage={user?.photoURL || user?.profileImage}
+        lastDonation={user?.lastDonation || '2024-01-15'}
+        donationCount={user?.donationCount ?? 5}
+        cpf={user?.cpf || '123.456.789-00'}
+        rg={user?.rg || '12.345.678-9'}
+        birthDate={user?.birthDate || '1990-05-15'}
+        gender={user?.gender || 'M'}
+      />
+
+      {/* Donation History Modal */}
+      <Modal
+        visible={historyModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setHistoryModalVisible(false)}
+      >
+        <DonationHistory
+          userId={user?.id?.toString()}
+          onClose={() => setHistoryModalVisible(false)}
+          isModal={true}
+        />
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -404,7 +555,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingVertical: 15,
     borderBottomWidth: 1,
     borderBottomColor: "#E0E0E0",
     backgroundColor: "#f8dddd",
@@ -435,6 +586,28 @@ const styles = StyleSheet.create({
   },
   notificationButton: {
     padding: 8,
+    position: 'relative',
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: '#E73645',
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  notificationBadgeText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  profileButton: {
+    padding: 8,
+    marginRight: 4,
   },
   menuContainer: {
     flexDirection: "row",
@@ -507,9 +680,9 @@ const styles = StyleSheet.create({
   bloodStockSection: {
     backgroundColor: "white",
     margin: 15,
-    padding: 20,
-    borderRadius: 10,
-    elevation: 2,
+    padding: 16,
+    borderRadius: 12,
+    elevation: 3,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -636,44 +809,61 @@ const styles = StyleSheet.create({
   bloodGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    justifyContent: "space-between",
+    justifyContent: "space-around", // Better distribution for responsive cards
+    gap: 6, // Smaller gap to prevent overflow on small screens
+    paddingHorizontal: 2,
   },
   bloodCard: {
-    width: "22%",
+    // Width is now set dynamically in the component
     aspectRatio: 1,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#DDD",
+    borderColor: "#E5E7EB",
     alignItems: "center",
     justifyContent: "space-between",
-    padding: 8,
-    marginBottom: 10,
-    backgroundColor: "#FAFAFA",
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    marginBottom: 8,
+    backgroundColor: "#FFFFFF",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   bloodDropContainer: {
     alignItems: "center",
     justifyContent: "center",
     flex: 1,
+    paddingTop: 4,
   },
   bloodDropIcon: {
-    marginBottom: 2,
+    marginBottom: 4,
   },
   bloodType: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#333",
+    // fontSize is now set dynamically in the component
+    fontWeight: "700",
+    color: "#1F2937",
+    textAlign: "center",
+    marginTop: 2,
   },
   statusIndicator: {
     paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 10,
-    minWidth: 45,
+    paddingVertical: 3,
+    borderRadius: 6,
+    width: "95%",
     alignItems: "center",
+    justifyContent: "center",
+    alignSelf: "center",
   },
   statusText: {
-    fontSize: 10,
+    // fontSize is now set dynamically in the component
     color: "white",
-    fontWeight: "bold",
+    fontWeight: "600",
+    textAlign: "center",
   },
   actionButtonsContainer: {
     paddingHorizontal: 15,
@@ -696,32 +886,120 @@ const styles = StyleSheet.create({
   hemoseSection: {
     backgroundColor: "white",
     margin: 15,
-    padding: 20,
-    borderRadius: 10,
+    borderRadius: 12,
     elevation: 2,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
+    overflow: 'hidden',
   },
-  hemoseSchedule: {
-    alignItems: "center",
+  // Estilos dos horários detalhados
+  horarioHeader: {
+    backgroundColor: '#E73645',
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  hemoseDay: {
+  horarioHeaderIcon: {
+    width: 45,
+    height: 45,
+    borderRadius: 22.5,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  horarioHeaderText: {
+    flex: 1,
+  },
+  horarioTitle: {
     fontSize: 16,
-    fontWeight: "bold",
-    color: "#333",
+    fontWeight: '700',
+    color: '#fff',
+    marginBottom: 2,
   },
-  hemoseHours: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#FF4444",
-    marginVertical: 5,
-  },
-  hemoseNote: {
+  horarioSubtitle: {
     fontSize: 12,
-    color: "#666",
-    textAlign: "center",
-    marginTop: 5,
+    color: 'rgba(255,255,255,0.9)',
+  },
+  horarioList: {
+    padding: 16,
+  },
+  horarioItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    marginBottom: 6,
+    backgroundColor: '#F8F9FA',
+    borderRadius: 8,
+  },
+  horarioItemToday: {
+    backgroundColor: '#E73645',
+  },
+  horarioDia: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    flex: 1,
+  },
+  horarioDiaToday: {
+    color: '#fff',
+  },
+  horarioDiaFechado: {
+    color: '#999',
+  },
+  horarioRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  horarioHoras: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#E73645',
+  },
+  horarioHorasToday: {
+    color: '#fff',
+  },
+  horarioHorasFechado: {
+    color: '#999',
+  },
+  hemoseStatusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#34D399',
+  },
+  hemoseStatusBadge: {
+    backgroundColor: '#34D399',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  hemoseStatusText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  hemoseContact: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
+  },
+  contactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  contactText: {
+    fontSize: 13,
+    color: '#666',
+    marginLeft: 8,
+    flex: 1,
   },
 });

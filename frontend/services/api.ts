@@ -60,6 +60,48 @@ class APIService {
   }
 
   /**
+   * Check API connectivity
+   */
+  async checkConnectivity(): Promise<{hemose: boolean, local: boolean}> {
+    const results = {hemose: false, local: false};
+    
+    try {
+      const hemonseRes = await this.fetchWithTimeout(`${this.hemonseBase()}/apiagendamento/cidades/1/1/1`);
+      results.hemose = hemonseRes.ok;
+    } catch (error) {
+      console.warn('HEMOSE API não disponível');
+    }
+    
+    try {
+      const localRes = await this.fetchWithTimeout(`${this.baseURL}`);
+      results.local = localRes.ok;
+    } catch (error) {
+      console.warn('Backend local não disponível');
+    }
+    
+    return results;
+  }
+
+  /**
+   * Send notification via local backend (always uses local for reliability)
+   */
+  async sendNotification(payload: {idUsuario: string, titulo: string, corpo: string}): Promise<any> {
+    try {
+      const response = await this.fetchWithTimeout(`${this.baseURL}/notificacoes/usuario`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return await response.json();
+      
+    } catch (error) {
+      console.error('❌ Falha ao enviar notificação:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Get current blood stock from the API
    */
   async getBloodStock(): Promise<TransformedBloodStock[]> {
@@ -195,36 +237,105 @@ class APIService {
   }
 
   async postMarcarAgendamento(payload: Record<string, any>): Promise<any> {
-    const url = `${this.hemonseBase()}/apiagendamento/agendamento/marcar`;
-    // The backend expects form-data with possible file upload; accept either FormData or JSON
-    const options: RequestInit = {};
-    if (payload instanceof FormData) {
-      options.method = 'POST';
-      options.body = payload as any;
-      // fetchWithTimeout will set JSON headers; avoid overwriting for FormData
-      (options.headers as any) = {};
-    } else {
-      options.method = 'POST';
-      options.body = JSON.stringify(payload);
-    }
+    try {
+      // Tenta primeiro a API externa do HEMOSE
+      const hemonseUrl = `${this.hemonseBase()}/apiagendamento/agendamento/marcar`;
+      const options: RequestInit = {};
+      
+      if (payload instanceof FormData) {
+        options.method = 'POST';
+        options.body = payload as any;
+        (options.headers as any) = {};
+      } else {
+        options.method = 'POST';
+        options.body = JSON.stringify(payload);
+      }
 
-    const res = await this.fetchWithTimeout(url, options);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return res.json();
+      const res = await this.fetchWithTimeout(hemonseUrl, options);
+      if (!res.ok) throw new Error(`HEMOSE API HTTP ${res.status}`);
+      
+      const result = await res.json();
+      console.log('✅ Agendamento realizado via API HEMOSE');
+      return { ...result, _source: 'hemose' };
+      
+    } catch (hemonseError) {
+      const hemonseMsg = hemonseError instanceof Error ? hemonseError.message : 'Erro desconhecido';
+      console.warn('⚠️ Falha na API HEMOSE, tentando backend local:', hemonseMsg);
+      
+      try {
+        // Fallback para o backend local
+        const localUrl = `${this.baseURL}/agendamentos/apiagendamento/agendamento/marcar`;
+        const localOptions: RequestInit = {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        };
+
+        const localRes = await this.fetchWithTimeout(localUrl, localOptions);
+        if (!localRes.ok) throw new Error(`Backend local HTTP ${localRes.status}`);
+        
+        const localResult = await localRes.json();
+        console.log('✅ Agendamento realizado via backend local (fallback)');
+        return { ...localResult, _source: 'local' };
+        
+      } catch (localError) {
+        const localMsg = localError instanceof Error ? localError.message : 'Erro desconhecido';
+        console.error('❌ Falha em ambos os backends:', localMsg);
+        throw new Error(`Falha no agendamento: HEMOSE (${hemonseMsg}), Local (${localMsg})`);
+      }
+    }
   }
 
   async postMarcarCampanha(payload: Record<string, any>): Promise<any> {
-    const url = `${this.hemonseBase()}/apiagendamento/campanha/marcar`;
-    const options: RequestInit = {
-      method: 'POST',
-      body: payload instanceof FormData ? (payload as any) : JSON.stringify(payload),
-    };
-    if (payload instanceof FormData) {
-      (options.headers as any) = {};
+    try {
+      // Tenta primeiro a API externa do HEMOSE
+      const hemonseUrl = `${this.hemonseBase()}/apiagendamento/campanha/marcar`;
+      const options: RequestInit = {
+        method: 'POST',
+        body: payload instanceof FormData ? (payload as any) : JSON.stringify(payload),
+      };
+      
+      if (payload instanceof FormData) {
+        (options.headers as any) = {};
+      }
+      
+      const res = await this.fetchWithTimeout(hemonseUrl, options);
+      if (!res.ok) throw new Error(`HEMOSE API HTTP ${res.status}`);
+      
+      const result = await res.json();
+      console.log('✅ Campanha marcada via API HEMOSE');
+      return { ...result, _source: 'hemose' };
+      
+    } catch (hemonseError) {
+      const hemonseMsg = hemonseError instanceof Error ? hemonseError.message : 'Erro desconhecido';
+      console.warn('⚠️ Falha na API HEMOSE para campanha, tentando backend local:', hemonseMsg);
+      
+      try {
+        // Fallback para o backend local
+        const localUrl = `${this.baseURL}/campanhas`; // Usando rota de campanhas do backend local
+        const localOptions: RequestInit = {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        };
+
+        const localRes = await this.fetchWithTimeout(localUrl, localOptions);
+        if (!localRes.ok) throw new Error(`Backend local HTTP ${localRes.status}`);
+        
+        const localResult = await localRes.json();
+        console.log('✅ Campanha marcada via backend local (fallback)');
+        return { ...localResult, _source: 'local' };
+        
+      } catch (localError) {
+        const localMsg = localError instanceof Error ? localError.message : 'Erro desconhecido';
+        console.error('❌ Falha em ambos os backends para campanha:', localMsg);
+        throw new Error(`Falha ao marcar campanha: HEMOSE (${hemonseMsg}), Local (${localMsg})`);
+      }
     }
-    const res = await this.fetchWithTimeout(url, options);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return res.json();
   }
 
   async patchEditarAgendamento(payload: Record<string, any>): Promise<any> {
@@ -250,6 +361,116 @@ class APIService {
     const res = await this.fetchWithTimeout(url, { method: 'DELETE' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return res.json();
+  }
+
+  /**
+   * Get user notifications
+   */
+  async getUserNotifications(userId: string): Promise<any> {
+    try {
+      const response = await this.fetchWithTimeout(`${this.baseURL}/notificacoes/usuario/${userId}`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error('❌ Falha ao buscar notificações:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Mark notification as read
+   */
+  async markNotificationAsRead(notificationId: string): Promise<any> {
+    try {
+      const response = await this.fetchWithTimeout(`${this.baseURL}/notificacoes/${notificationId}/read`, {
+        method: 'PATCH',
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error('❌ Falha ao marcar notificação como lida:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get blood stock alerts for specific blood type
+   */
+  async getBloodStockAlerts(bloodType: string): Promise<any> {
+    try {
+      const response = await this.fetchWithTimeout(`${this.baseURL}/bancodesangue/alerts/${bloodType}`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error('❌ Falha ao buscar alertas de estoque:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get upcoming appointment reminders
+   */
+  async getAppointmentReminders(userId: string): Promise<any> {
+    try {
+      const response = await this.fetchWithTimeout(`${this.baseURL}/agendamentos/reminders/${userId}`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error('❌ Falha ao buscar lembretes de agendamento:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Send blood stock alert to users with specific blood type
+   */
+  async sendBloodStockAlert(bloodType: string, urgencyLevel: 'critical' | 'alert', message: string): Promise<any> {
+    try {
+      const response = await this.fetchWithTimeout(`${this.baseURL}/notificacoes/blood-alert`, {
+        method: 'POST',
+        body: JSON.stringify({
+          bloodType,
+          urgencyLevel,
+          message,
+        }),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error('❌ Falha ao enviar alerta de estoque:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get user profile with notification preferences
+   */
+  async getUserProfile(userId: string): Promise<any> {
+    try {
+      const response = await this.fetchWithTimeout(`${this.baseURL}/usuarios/profile/${userId}`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error('❌ Falha ao buscar perfil do usuário:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update user profile and notification preferences
+   */
+  async updateUserProfile(userId: string, profileData: any): Promise<any> {
+    try {
+      const response = await this.fetchWithTimeout(`${this.baseURL}/usuarios/profile/${userId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(profileData),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error('❌ Falha ao atualizar perfil:', error);
+      throw error;
+    }
   }
 
   /**

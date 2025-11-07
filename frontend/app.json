@@ -4,7 +4,7 @@
     "slug": "fsph_test",
     "version": "1.0.0",
     "description": "FSPH Test App - Sistema de doação de sangue",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "fsphtest",
     "userInterfaceStyle": "automatic",

@@ -11,6 +11,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  SafeAreaView,
 } from "react-native";
 import { GOOGLE_OAUTH_CONFIG } from "../config/auth";
 
@@ -68,7 +69,7 @@ export default function LoginScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Image
           source={require("../assets/images/logo_hemose.png")}
@@ -141,7 +142,7 @@ export default function LoginScreen() {
           </TouchableOpacity>
         </View>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 

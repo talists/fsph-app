@@ -50,10 +50,23 @@ export async function listarTodosOsDias(id_local: number, tipo: TipoAgendamento)
 }
 export async function listarHorariosPorDia(dateSelected: string, id_local: number, tipo: TipoAgendamento) {
   const { perm_individual, perm_medula, perm_campanha } = tipoToPerm(tipo);
-  const { data } = await HEMOSE.get(
+  const response = await HEMOSE.get(
     `/apiagendamento/blocoagendamento/listarByDate/${dateSelected}/${id_local}/${perm_individual}/${perm_medula}/${perm_campanha}`
   );
-  return data as Array<{ id_bloco_doacao: number; hora: string }>;
+  
+  // A API retorna uma estrutura: { status, err, msg, data: [...] }
+  // Os horários estão dentro de response.data.data
+  const horarios = response.data.data || [];
+  
+  // Mapear para o formato esperado pelo app
+  return horarios.map((item: any) => ({
+    id_bloco_doacao: item.id, // O campo correto é 'id'
+    hora: `${item.min_hora.slice(0,5)} - ${item.max_hora.slice(0,5)}`, // Formar string do horário
+    vagas_restantes: item.vagas_restantes,
+    qt_maxima: item.qt_maxima,
+    min_hora: item.min_hora,
+    max_hora: item.max_hora
+  }));
 }
 
 // Marcar agendamento

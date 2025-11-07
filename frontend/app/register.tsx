@@ -11,6 +11,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  SafeAreaView,
 } from "react-native";
 import { GOOGLE_OAUTH_CONFIG } from "../config/auth";
 
@@ -77,8 +78,9 @@ export default function RegisterScreen() {
   };
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.header}>
+    <SafeAreaView style={styles.safeArea}>
+      <ScrollView style={styles.container}>
+        <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
@@ -198,11 +200,16 @@ export default function RegisterScreen() {
           </TouchableOpacity>
         </View>
       </View>
-    </ScrollView>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: "#F8F4F4",
+  },
   container: {
     flex: 1,
     backgroundColor: "#F8F4F4",

@@ -1,4 +1,10 @@
-import { apiService } from "./api";
+// services/auth.service.ts
+import { apiService } from "./api"; // Importa a instância do Axios
+import { isAxiosError } from "axios"; // Importa o type guard do Axios
+import * as Notifications from "expo-notifications";
+import * as Device from "expo-device";
+import Constants from "expo-constants";
+import { Platform } from "react-native";
 
 // --- DEFINIÇÃO DOS TIPOS ---
 export interface User {
@@ -8,32 +14,32 @@ export interface User {
   tipo_sanguineo?: string;
   url_foto_perfil?: string;
 }
-
-/**
- * Resposta da rota de Login (/auth/login)
- */
 export interface AuthResponse {
   accessToken: string;
   refreshToken: string;
   usuario: User;
 }
-
-/**
- * Resposta da rota de Registo (/usuarios/register)
- */
 export interface RegisterResponse {
   token: string;
   usuario: User;
 }
-
-/**
- * Resposta da rota de Login com Google (/oauth/login)
- */
 export interface GoogleAuthResponse {
   accessToken: string;
   refreshToken: string;
   usuario: User;
 }
+
+// =================== ALTERAÇÃO AQUI ===================
+// Corrigido para usar as propriedades modernas do NotificationBehavior
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowBanner: true, // Substitui 'shouldShowAlert'
+    shouldShowList: true, // Adiciona à lista de notificações
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+  }),
+});
+// ======================================================
 
 /**
  * O AuthService é responsável por todas as chamadas de API
@@ -44,83 +50,138 @@ class AuthService {
    * Regista um novo utilizador.
    */
   async register(data: FormData): Promise<RegisterResponse> {
-    const response = await apiService.fetch(
-      "/usuarios/register",
-      {
-        method: "POST",
-        body: data,
-      },
-      false
-    );
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      if (errorData.errors && Array.isArray(errorData.errors)) {
-        throw new Error(errorData.errors[0].message);
+    try {
+      const response = await apiService.post<RegisterResponse>(
+        "/usuarios/register",
+        data,
+        { isAuthRequired: false }
+      );
+      return response.data;
+    } catch (error: any) {
+      if (isAxiosError(error) && error.response) {
+        const errorData = error.response.data as {
+          msg?: string;
+          errors?: { message: string }[];
+        };
+        if (errorData.errors && Array.isArray(errorData.errors)) {
+          throw new Error(errorData.errors[0].message);
+        }
+        throw new Error(errorData?.msg || "Erro ao registar");
       }
-      throw new Error(errorData.msg || "Erro ao registar");
+      throw error;
     }
-    return response.json() as Promise<RegisterResponse>;
   }
 
   /**
    * Autentica um utilizador com email e senha.
    */
   async login(email: string, senha: string): Promise<AuthResponse> {
-    const response = await apiService.fetch(
-      "/auth/login",
-      {
-        method: "POST",
-        body: { email, senha },
-      },
-      false
-    );
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.msg || "Email ou senha inválidos");
+    try {
+      const response = await apiService.post<AuthResponse>(
+        "/auth/login",
+        { email, senha },
+        { isAuthRequired: false } //
+      );
+      return response.data;
+    } catch (error: any) {
+      if (isAxiosError(error) && error.response) {
+        const errorData = error.response.data as { msg?: string };
+        throw new Error(errorData?.msg || "Email ou senha inválidos");
+      }
+      throw error;
     }
-    return response.json() as Promise<AuthResponse>;
   }
 
   /**
    * Autentica um utilizador com o id_token do Google.
    */
   async loginWithGoogle(idToken: string): Promise<GoogleAuthResponse> {
-    const response = await apiService.fetch(
-      "/oauth/login",
-      {
-        method: "POST",
-        body: { provider: "google", id_token: idToken },
-      },
-      false
-    );
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.msg || "Erro ao fazer login com o Google");
+    try {
+      const response = await apiService.post<GoogleAuthResponse>(
+        "/oauth/login",
+        { provider: "google", id_token: idToken },
+        { isAuthRequired: false } //
+      );
+      return response.data;
+    } catch (error: any) {
+      if (isAxiosError(error) && error.response) {
+        const errorData = error.response.data as { msg?: string };
+        throw new Error(errorData?.msg || "Erro ao fazer login com o Google");
+      }
+      throw error;
     }
-    return response.json() as Promise<GoogleAuthResponse>;
+  }
+
+  /**
+   * Pede permissão e obtém o Expo Push Token do dispositivo.
+   * @returns O token, ou null se não for possível obter.
+   */
+  async getExpoPushToken(): Promise<string | null> {
+    let token;
+
+    if (!Device.isDevice) {
+      console.warn("Notificações Push só funcionam em dispositivos físicos.");
+      return null;
+    }
+
+    // 1. Pede permissão
+    const { status: existingStatus } =
+      await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+    if (existingStatus !== "granted") {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+
+    if (finalStatus !== "granted") {
+      console.error("Falha ao obter permissão para notificações!");
+      // Você pode querer mostrar um alerta para o usuário aqui
+      return null;
+    }
+
+    // 2. Obtém o Token
+    try {
+      // Garante que o projectId está sendo pego do app.json
+      const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+      if (!projectId) {
+        console.error("projectId do Expo não encontrado no app.json");
+        return null;
+      }
+
+      token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+      console.log("Expo Push Token obtido:", token);
+    } catch (e) {
+      console.error("Erro ao obter o token:", e);
+      return null;
+    }
+
+    // 3. Configura canal (Android)
+    if (Platform.OS === "android") {
+      await Notifications.setNotificationChannelAsync("default", {
+        name: "default",
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: "#FF23237C", // Cor vermelha do hemocentro
+      });
+    }
+    return token;
   }
 
   /**
    * Atualiza o FCM Token do utilizador no backend.
+   * (Este método já existe e está perfeito)
    */
   async updateFcmToken(fcmToken: string): Promise<void> {
-    const response = await apiService.fetch(
-      "/usuarios/fcm-token",
-      {
-        method: "PATCH",
-        body: { fcm_token: fcmToken },
-      },
-      true
-    );
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(
-        errorData.msg || "Erro ao atualizar token de notificação"
-      );
+    try {
+      await apiService.patch("/usuarios/fcm-token", { fcm_token: fcmToken });
+    } catch (error: any) {
+      if (isAxiosError(error) && error.response) {
+        const errorData = error.response.data as { msg?: string };
+        throw new Error(
+          errorData?.msg || "Erro ao atualizar token de notificação"
+        );
+      }
+      throw error;
     }
   }
 
@@ -128,36 +189,36 @@ class AuthService {
    * Busca os dados do perfil do utilizador autenticado.
    */
   async getMeuPerfil(): Promise<User> {
-    const response = await apiService.fetch(
-      "/usuarios/meu-perfil",
-      { method: "GET" },
-      true
-    );
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.msg || "Erro ao buscar perfil");
+    try {
+      const response = await apiService.get<User>("/usuarios/meu-perfil");
+      return response.data;
+    } catch (error: any) {
+      if (isAxiosError(error) && error.response) {
+        const errorData = error.response.data as { msg?: string };
+        throw new Error(errorData?.msg || "Erro ao buscar perfil");
+      }
+      throw error;
     }
-    return response.json() as Promise<User>;
   }
 
   /**
    * Busca um novo accessToken usando um refreshToken.
    */
   async refreshToken(refreshToken: string): Promise<{ accessToken: string }> {
-    const response = await apiService.fetch(
-      "/auth/refresh-token",
-      {
-        method: "POST",
-        body: { refreshToken },
-      },
-      false
-    );
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.msg || "Sessão expirada");
+    try {
+      const response = await apiService.post<{ accessToken: string }>(
+        "/auth/refresh-token",
+        { refreshToken },
+        { isAuthRequired: false } //
+      );
+      return response.data;
+    } catch (error: any) {
+      if (isAxiosError(error) && error.response) {
+        const errorData = error.response.data as { msg?: string };
+        throw new Error(errorData?.msg || "Sessão expirada");
+      }
+      throw error;
     }
-    return response.json() as Promise<{ accessToken: string }>;
   }
 
   /**
@@ -165,12 +226,11 @@ class AuthService {
    */
   async logout(): Promise<void> {
     try {
-      await apiService.fetch("/auth/logout", { method: "POST" }, true);
+      await apiService.post("/auth/logout");
     } catch (error) {
       console.error("Erro ao notificar backend sobre logout:", error);
     }
   }
 }
 
-// Exporta uma instância única (singleton) do serviço
 export const authService = new AuthService();

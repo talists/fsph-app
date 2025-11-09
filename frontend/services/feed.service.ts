@@ -1,31 +1,25 @@
-import { apiService } from './api';
-import type { User } from '../contexts/AuthContext'; 
+// services/feed.service.ts
+import { apiService } from "./api"; // Importa a instância do Axios
+import { isAxiosError } from "axios"; // Importa o type guard
+import type { User } from "../services/auth.service";
 
 // --- Tipos de Resposta da API do Feed ---
-
-/**
- * Define a estrutura de um único Post, vindo da API.
- * Corresponde ao que o backend envia.
- */
+// (As suas interfaces permanecem idênticas)
 export interface Post {
   id: number;
   legenda: string;
   url_imagem: string;
   criado_em: string;
-  
-  usuario: Pick<User, 'id' | 'nome' | 'url_foto_perfil'>;
+  usuario: Pick<User, "id" | "nome" | "url_foto_perfil">;
 }
 
-/**
- * Define a resposta completa da API de feed (com paginação)
- * Corresponde ao objeto que o 'FeedService' do backend retorna.
- */
 export interface FeedResponse {
   totalPosts: number;
   currentPage: number;
   totalPages: number;
   posts: Post[];
 }
+// ----------------------------------------------
 
 /**
  * O FeedService é responsável por todas as chamadas de API
@@ -34,24 +28,30 @@ export interface FeedResponse {
 class FeedService {
   /**
    * Busca uma página de posts do feed.
-   * Requer autenticação.
+   * Requer autenticação (o padrão do nosso apiService)
    */
   async getFeedPosts(page = 1, limit = 20): Promise<FeedResponse> {
     try {
-      const response = await apiService.fetch(
-        `/feed?page=${page}&limit=${limit}`,
-        { method: 'GET' },
-        true // true = esta rota requer autenticação
+      // MUDANÇA: Usamos .get() e passamos os query params
+      // de forma estruturada usando o 'params'
+      const response = await apiService.get<FeedResponse>(
+        "/feed",
+        {
+          params: { page, limit }, // O Axios transforma isto em ?page=1&limit=20
+        }
+        // Não é preciso passar 'isAuthRequired: true', pois é o padrão
       );
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.msg || "Erro ao carregar o feed");
-      }
-
-      return response.json() as Promise<FeedResponse>;
+      // MUDANÇA: Os dados já vêm em 'response.data'
+      return response.data;
     } catch (error: any) {
       console.error("❌ Erro em getFeedPosts:", error);
+
+      // MUDANÇA: Tratamento de erro do Axios
+      if (isAxiosError(error) && error.response) {
+        const errorData = error.response.data as { msg?: string };
+        throw new Error(errorData?.msg || "Erro ao carregar o feed");
+      }
       throw error;
     }
   }
@@ -59,52 +59,46 @@ class FeedService {
   /**
    * Cria um novo post.
    * Lida com multipart/form-data.
-   * Requer autenticação.
+   * Requer autenticação (o padrão).
    */
   async createPost(data: FormData): Promise<Post> {
     try {
-      const response = await apiService.fetch(
-        '/feed',
-        {
-          method: 'POST',
-          body: data,
-        },
-        true 
+      // MUDANÇA: Usamos .post() e passamos o FormData diretamente.
+      // O Axios irá definir o 'Content-Type: multipart/form-data'
+      const response = await apiService.post<Post>(
+        "/feed",
+        data // O FormData vai direto no corpo
       );
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.msg || "Erro ao criar post");
-      }
-
-      return response.json() as Promise<Post>;
+      return response.data;
     } catch (error: any) {
       console.error("❌ Erro em createPost:", error);
+
+      if (isAxiosError(error) && error.response) {
+        const errorData = error.response.data as { msg?: string };
+        throw new Error(errorData?.msg || "Erro ao criar post");
+      }
       throw error;
     }
   }
 
   /**
    * Busca os posts de um utilizador específico (o utilizador autenticado).
-   * Requer autenticação.
+   * Requer autenticação (o padrão).
    */
   async getMeusPosts(): Promise<Post[]> {
     try {
-      const response = await apiService.fetch(
-        '/feed/usuario', // O backend já sabe quem é o utilizador pelo token
-        { method: 'GET' },
-        true // true = esta rota requer autenticação
-      );
+      // MUDANÇA: Usamos .get()
+      const response = await apiService.get<Post[]>("/feed/usuario");
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.msg || "Erro ao carregar os seus posts");
-      }
-
-      // O backend aqui retorna um array de Post, não um FeedResponse
-      return response.json() as Promise<Post[]>;
+      return response.data;
     } catch (error: any) {
       console.error("❌ Erro em getMeusPosts:", error);
+
+      if (isAxiosError(error) && error.response) {
+        const errorData = error.response.data as { msg?: string };
+        throw new Error(errorData?.msg || "Erro ao carregar os seus posts");
+      }
       throw error;
     }
   }
@@ -112,4 +106,3 @@ class FeedService {
 
 // Exporta uma instância única do serviço
 export const feedService = new FeedService();
-

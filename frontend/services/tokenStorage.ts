@@ -1,8 +1,7 @@
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from "expo-secure-store";
 
-// Define as chaves que usaremos para guardar os tokens de forma segura
-const ACCESS_TOKEN_KEY = 'accessToken';
-const REFRESH_TOKEN_KEY = 'refreshToken';
+const ACCESS_TOKEN_KEY = "accessToken";
+const REFRESH_TOKEN_KEY = "refreshToken";
 
 /**
  * Objeto para gerir o armazenamento seguro dos tokens de autenticação.
@@ -17,7 +16,6 @@ export const tokenStorage = {
   async saveTokens(accessToken: string, refreshToken?: string): Promise<void> {
     try {
       await SecureStore.setItemAsync(ACCESS_TOKEN_KEY, accessToken);
-      // O refreshToken só é enviado no login normal, o registo/google pode não o ter
       if (refreshToken) {
         await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, refreshToken);
       }
@@ -63,4 +61,3 @@ export const tokenStorage = {
     }
   },
 };
-

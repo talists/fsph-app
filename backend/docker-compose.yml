@@ -1,11 +1,10 @@
-# A linha 'version' foi removida por ser obsoleta
 services:
-  # Serviço do Backend da Aplicação
   backend:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: backend-gota-a-gota-fsph
     ports:
-      # Porta externa 3334 (para o seu PC) -> porta interna 3333 (no contentor)
       - "3334:3333"
     volumes:
       - ./src:/app/src
@@ -18,7 +17,6 @@ services:
         condition: service_healthy
     command: npm run dev
 
-  # Serviço do Banco de Dados
   db:
     image: mysql:8.0
     container_name: gota-a-gota-db
@@ -27,11 +25,9 @@ services:
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
       MYSQL_DATABASE: ${DB_DATABASE}
     ports:
-      # Porta externa 3307 (para o seu PC) -> porta interna 3306 (no contentor)
       - "3307:3306"
     volumes:
-      - db-data-clone:/var/lib/mysql
-    # ADICIONADO: Verificação de saúde para o MySQL
+      - db-data:/var/lib/mysql
     healthcheck:
       test:
         [
@@ -47,23 +43,19 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 30s # Dá 30s para o MySQL arrancar antes de começar a testar
+      start_period: 30s
 
-  # Serviço de Cache
   cache:
     image: redis:alpine
     container_name: gota-a-gota-redis
     restart: always
     ports:
-      # Porta externa 6380 (para o seu PC) -> porta interna 6379 (no contentor)
       - "6380:6379"
-    # ADICIONADO: Verificação de saúde para o Redis
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-# Define o volume nomeado para o banco de dados
 volumes:
   db-data:

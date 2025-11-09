@@ -1,4 +1,4 @@
-package com.lauroaug.fsph_test
+package com.lauroaug.gotaagotafsph
 
 import android.app.Application
 import android.content.res.Configuration

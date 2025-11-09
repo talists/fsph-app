@@ -1,4 +1,4 @@
-import { ZodError } from 'zod';
+import { ZodError } from "zod";
 
 /**
  * Middleware que valida o 'req.body' contra um schema Zod.
@@ -6,14 +6,12 @@ import { ZodError } from 'zod';
  */
 export const validateBody = (schema) => async (req, res, next) => {
   try {
-    // Valida o req.body diretamente contra o schema "plano"
     await schema.parseAsync(req.body);
     return next();
   } catch (error) {
     if (error instanceof ZodError) {
-      // Formata os erros do Zod para serem fáceis de ler
-      const errors = error.errors.map(e => ({
-        campo: e.path.join('.'),
+      const errors = error.errors.map((e) => ({
+        campo: e.path.join("."),
         mensagem: e.message,
       }));
       return res.status(400).json({

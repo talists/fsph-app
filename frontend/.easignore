@@ -1,0 +1,28 @@
+# Ignora o node_modules (o EAS instala o seu próprio)
+
+node_modules/
+
+# Ignora o backend (NUNCA deve estar no build do frontend)
+
+# Coloque o nome EXATO da sua pasta.
+
+# Se ela se chama 'backend-gota-a-gota-fsph', use:
+
+../backend-gota-a-gota-fsph/
+
+# Se ela se chama 'backend', use:
+
+../backend/
+
+# Ignora o git
+
+.git/
+
+# Ignora ficheiros de ambiente
+
+.env
+
+# Ignora o lixo de build do Android
+
+android/build/
+android/app/build/

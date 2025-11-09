@@ -1,4 +1,4 @@
-package com.lauroaug.fsph_test
+package com.lauroaug.gotaagotafsph
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build

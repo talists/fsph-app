@@ -33,6 +33,9 @@ function RootLayoutNav() {
   const colorScheme = useColorScheme();
 
   useEffect(() => {
+    console.log(
+      `[AUTH REDIRECT] isLoading: ${isLoading}, isAnimationFinished: ${isAnimationFinished}, user exists: ${!!user}`
+    );
     if (isLoading || !isAnimationFinished) {
       return;
     }

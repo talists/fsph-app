@@ -87,9 +87,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'com.lauroaug.fsph_test'
+    namespace 'com.lauroaug.gotaagotafsph'
     defaultConfig {
-        applicationId 'com.lauroaug.fsph_test'
+        applicationId 'com.lauroaug.gotaagotafsph'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

@@ -4,10 +4,13 @@ import { verifyToken } from "../../middlewares/auth.middleware.js";
 import { upload } from "../../config/upload.js";
 
 // 1. Importa o middleware 'validateBody' (o nome correto que definimos)
-import { validateBody } from "../../middlewares/validate.middleware.js"; 
+import { validateBody } from "../../middlewares/validate.middleware.js";
 
 // 2. Importa os schemas (que são "planos" e corretos)
-import { registerSchema, updateUsuarioSchema } from "./validations/usuario.schemas.js";
+import {
+  registerSchema,
+  updateUsuarioSchema,
+} from "./validations/usuario.schemas.js";
 
 const router = express.Router();
 
@@ -16,10 +19,9 @@ const router = express.Router();
 //========================//
 
 router.post(
-  "/register", 
-  upload.single("url_foto_perfil"), 
-  // 3. Usa o 'validateBody' e remove o log de depuração
-  validateBody(registerSchema), 
+  "/register",
+  upload.single("url_foto_perfil"),
+  validateBody(registerSchema),
   UsuarioController.register
 );
 
@@ -29,10 +31,10 @@ router.get("/:id", verifyToken, UsuarioController.getById);
 
 // 4. Usa o 'validateBody' também para a atualização
 router.patch(
-  "/:id", 
-  verifyToken, 
-  upload.single("url_foto_perfil"), 
-  validateBody(updateUsuarioSchema), 
+  "/:id",
+  verifyToken,
+  upload.single("url_foto_perfil"),
+  validateBody(updateUsuarioSchema),
   UsuarioController.update
 );
 

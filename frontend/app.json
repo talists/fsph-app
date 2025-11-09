@@ -1,18 +1,18 @@
 {
   "expo": {
-    "name": "fsph_test",
-    "slug": "fsph_test",
+    "name": "gotaagotafsph",
+    "slug": "gotaagotafsph",
     "owner": "lauroaug",
     "version": "1.0.0",
     "description": "FSPH Test App - Sistema de doação de sangue",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "fsphtest",
+    "scheme": "gotaagotafsph",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.lauroaug.fsphtest"
+      "bundleIdentifier": "com.lauroaug.gotaagotafsph"
     },
     "android": {
       "adaptiveIcon": {
@@ -23,8 +23,9 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.lauroaug.fsph_test",
-      "permissions": ["android.permission.RECORD_AUDIO"]
+      "package": "com.lauroaug.gotaagotafsph",
+      "permissions": ["android.permission.RECORD_AUDIO"],
+      "scheme": "gotaagotafsph"
     },
     "web": {
       "output": "static",
@@ -51,7 +52,17 @@
           }
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-build-properties",
+
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "gradlePluginVersion": "7.3.0"
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
@@ -59,7 +70,7 @@
     },
     "extra": {
       "eas": {
-        "projectId": "9252855c-c9a7-426a-8cb9-4b174dad82f3"
+        "projectId": "4326ba4c-8055-4933-9a10-fb4691fa8c4b"
       }
     }
   }

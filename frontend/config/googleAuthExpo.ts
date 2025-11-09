@@ -5,11 +5,17 @@ import { atob } from "react-native-quick-base64";
 WebBrowser.maybeCompleteAuthSession();
 
 const GOOGLE_CLIENT_ID =
-  "896137778307-t4bcdk08adqg0461kouik4mh6bg840c1.apps.googleusercontent.com"; // SEU ID ANDROID
+  "896137778307-v0gvr801j42k4ua42o71jbv9jkkqnvit.apps.googleusercontent.com";
 const GOOGLE_SCOPES = ["openid", "profile", "email"];
 
-const REDIRECT_URI =
-  "fsphtest://expo-development-client/?url=https://u.expo.dev/9252855c-c9a7-426a-8cb9-4b174dad82f3?channel-name=main";
+console.log("BUILD 2.0 - USANDO PROXY");
+
+const REDIRECT_URI = AuthSession.makeRedirectUri({
+  // Este método gera o URI complexo que o Development Client espera:
+  // Ex: exp://192.168.x.x:8081/--/gotaagotafsph
+  scheme: "gotaagotafsph",
+  // MANTENHA useProxy: false (o padrão), e deixe o Google Cloud Console lidar com a credencial nativa.
+});
 
 export interface GoogleSignInResult {
   success: boolean;
@@ -28,6 +34,8 @@ export const configureGoogleSignIn = () => {
 };
 
 export const signInWithGoogle = async (): Promise<GoogleSignInResult> => {
+  await WebBrowser.dismissBrowser();
+
   if (!GOOGLE_CLIENT_ID) {
     console.error(
       "❌ Erro de Configuração: GOOGLE_CLIENT_ID não está definido."
@@ -43,11 +51,11 @@ export const signInWithGoogle = async (): Promise<GoogleSignInResult> => {
     console.log("🔑 Usando Nonce:", nonce);
 
     const request = new AuthSession.AuthRequest({
-      clientId: GOOGLE_CLIENT_ID, // ID Android
+      clientId: GOOGLE_CLIENT_ID,
       scopes: GOOGLE_SCOPES,
-      redirectUri: REDIRECT_URI, // URI do Dev Client
+      redirectUri: REDIRECT_URI,
       responseType: AuthSession.ResponseType.IdToken,
-      usePKCE: false, // O fluxo nativo Android geralmente não usa PKCE
+      usePKCE: false,
       extraParams: {
         nonce: nonce,
       },
@@ -59,13 +67,8 @@ export const signInWithGoogle = async (): Promise<GoogleSignInResult> => {
 
     console.log("🔍 Endpoints descobertos. Abrindo navegador...");
 
-    /**
-     * ✅ CORREÇÃO 3: O proxy é DESLIGADO (removido)
-     */
-    const result = await request.promptAsync(discovery); // Sem { useProxy: true }
+    const result = await request.promptAsync(discovery);
 
-    // ... (o resto do arquivo de tratamento de erro e token é o mesmo) ...
-    // ...
     if (result.type === "success") {
       console.log("✅ Login com Google bem-sucedido!");
       const idToken = result.params?.id_token;

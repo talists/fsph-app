@@ -9,7 +9,6 @@ import {
   deleteFromCloudflare,
 } from "../../utils/cloudflare.js";
 
-// A inicialização do dotenv.config() foi movida para o server.js
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 export class UsuarioService {
@@ -148,24 +147,26 @@ export class UsuarioService {
 
     if (usuariosParaReativar.length === 0) {
       console.log("Nenhum doador para reativar no momento.");
-      return { reativados: 0 };
+      return { reativados: 0, usuarios: [] };
     }
 
     console.log(
       `Encontrados ${usuariosParaReativar.length} doadores para reativar.`
-    );
+    ); // Pega apenas os IDs para uma atualização em massa
 
-    // Pega apenas os IDs para uma atualização em massa
     const ids = usuariosParaReativar.map((u) => u.id);
 
-    // Atualiza todos de uma vez no banco
-    await UsuarioRepository.update(ids, { esta_apto_para_doar: true });
+    await UsuarioRepository.update(ids, { esta_apto_para_doar: true }); // Invalida o cache de cada usuário atualizado
 
-    // Invalida o cache de cada usuário atualizado
     const cachePromises = ids.map((id) => redisClient.del(`usuario_${id}`));
     await Promise.all(cachePromises);
 
     console.log(`✅ ${ids.length} doadores foram reativados com sucesso.`);
-    return { reativados: ids.length };
+
+    // Filtra a lista original para retornar apenas usuários que têm um token
+    const usuariosComToken = usuariosParaReativar.filter((u) => u.fcm_token);
+
+    // Retorna a contagem E a lista de usuários com token
+    return { reativados: ids.length, usuarios: usuariosComToken };
   }
 }

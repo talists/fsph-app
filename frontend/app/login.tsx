@@ -12,12 +12,12 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { useAuth } from "../contexts/AuthContext";
-import { signInWithGoogle } from "../config/googleAuthExpo";
+import { signInWithGoogleNative } from "../config/googleAuthNative";
 
 export default function LoginScreen() {
   const router = useRouter();
   const { signIn, signInWithGoogle: signInWithGoogleContext } = useAuth();
-  
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -45,24 +45,18 @@ export default function LoginScreen() {
     setIsLoading(true);
     try {
       console.log("Iniciando login com Google...");
-      
-      // Chama a função do googleAuthExpo.ts
-      const result = await signInWithGoogle();
 
-      if (result.success && result.idToken) {
-        console.log("Token recebido, autenticando no backend...");
-        
-        // Envia o idToken para o backend via AuthContext
-        await signInWithGoogleContext(result.idToken);
-        
-        // A navegação será tratada automaticamente
-        console.log("Login com Google concluído!");
-      } else {
-        Alert.alert("Erro", result.error || "Erro ao fazer login com Google");
-      }
+      const { idToken } = await signInWithGoogleNative();
+
+      await signInWithGoogleContext(idToken);
+
+      console.log("Login com Google concluído!");
     } catch (error: any) {
       console.error("Erro no Google Login:", error);
-      Alert.alert("Erro", error.message || "Erro inesperado ao fazer login com Google");
+      Alert.alert(
+        "Erro",
+        error.message || "Erro inesperado ao fazer login com Google"
+      );
     } finally {
       setIsLoading(false);
     }
@@ -124,15 +118,12 @@ export default function LoginScreen() {
           </View>
         </View>
 
-        <TouchableOpacity 
-          onPress={handleForgotPassword}
-          disabled={isLoading}
-        >
+        <TouchableOpacity onPress={handleForgotPassword} disabled={isLoading}>
           <Text style={styles.forgotPassword}>Esqueceu sua senha?</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity 
-          style={styles.loginButton} 
+        <TouchableOpacity
+          style={styles.loginButton}
           onPress={handleLogin}
           disabled={isLoading}
         >
@@ -162,7 +153,7 @@ export default function LoginScreen() {
 
         <View style={styles.registerContainer}>
           <Text style={styles.registerText}>Não tem uma conta? </Text>
-          <TouchableOpacity 
+          <TouchableOpacity
             onPress={() => router.push("/register")}
             disabled={isLoading}
           >

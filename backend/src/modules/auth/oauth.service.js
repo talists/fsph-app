@@ -4,34 +4,38 @@ import { OAuth2Client } from "google-auth-library";
 import jwt from "jsonwebtoken";
 import AppDataSource from "../../config/data-source.js";
 import { Usuario } from "../usuarios/usuario.model.js";
+import { redisClient } from "../../config/redis.js";
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 const usuarioRepo = AppDataSource.getRepository(Usuario);
-const JWT_SECRET = process.env.JWT_SECRET || "segredo_super_secreto";
+const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
 
 export const OAuthService = {
   async getUserFromProvider(provider, idToken) {
     if (provider === "google") {
       console.log("🔍 [OAUTH] Verificando token do Google...");
 
-      // 1. Verifica a autenticidade do id_token usando a biblioteca do Google
-      const ticket = await client.verifyIdToken({
-        idToken: idToken,
-        audience: process.env.GOOGLE_CLIENT_ID,
-      });
+      try {
+        const ticket = await client.verifyIdToken({
+          idToken: idToken,
+          audience: process.env.GOOGLE_CLIENT_ID,
+        });
 
-      // 2. Se a verificação for bem-sucedida, o payload contém as informações do usuário
-      const payload = ticket.getPayload();
+        const payload = ticket.getPayload();
 
-      console.log("✅ [OAUTH] Token válido! Usuário:", payload.email);
+        console.log("✅ [OAUTH] Token válido! Usuário:", payload.email);
 
-      // 3. Mapeia os dados do Google para o formato do seu banco de dados
-      return {
-        id_google: payload.sub,
-        nome: payload.name,
-        email: payload.email,
-        url_foto_perfil: payload.picture,
-      };
+        return {
+          id_google: payload.sub,
+          nome: payload.name,
+          email: payload.email,
+          url_foto_perfil: payload.picture,
+        };
+      } catch (error) {
+        console.error("❌ [OAUTH] Erro ao validar token:", error.message);
+        throw new Error(`Token do Google inválido: ${error.message}`);
+      }
     }
 
     throw new Error("Provider não suportado");
@@ -47,31 +51,41 @@ export const OAuthService = {
     if (user) {
       console.log("✅ [OAUTH] Usuário encontrado, atualizando dados...");
       Object.assign(user, userData);
+      user.refresh_token = await OAuthService.generateRefreshToken(user);
     } else {
       console.log("➕ [OAUTH] Usuário não existe, criando novo...");
       user = usuarioRepo.create(userData);
-    }
 
-    // 🔥 GERA refreshToken e salva
-    user.refresh_token = await OAuthService.generateRefreshToken(user);
+      await usuarioRepo.save(user);
+      user.refresh_token = await OAuthService.generateRefreshToken(user);
+    }
 
     const savedUser = await usuarioRepo.save(user);
 
     delete savedUser.senha;
+    await redisClient.del("usuarios_all");
+    await redisClient.set(
+      `usuario_${savedUser.id}`,
+      JSON.stringify(savedUser),
+      { EX: 3600 }
+    );
+
     return savedUser;
   },
 
   async generateAccessToken(user) {
-    return jwt.sign(
+    const token = jwt.sign(
       { id: user.id, tipo: user.tipo || "DOADOR" },
-      process.env.JWT_SECRET,
-      { expiresIn: "15m" } // recomendado
+      JWT_SECRET,
+      { expiresIn: "15m" }
     );
+
+    await redisClient.set(`token_usuario_${user.id}`, token, { EX: 60 * 15 });
+
+    return token;
   },
 
   async generateRefreshToken(user) {
-    return jwt.sign({ id: user.id }, process.env.JWT_REFRESH_SECRET, {
-      expiresIn: "30d",
-    });
+    return jwt.sign({ id: user.id }, JWT_REFRESH_SECRET, { expiresIn: "30d" });
   },
 };

@@ -6,15 +6,12 @@ import { redisClient } from "../../config/redis.js";
 
 export class DoacaoService {
   static async create(data) {
-
     const novaDoacao = await DoacaoRepository.create(data);
 
-    // 2. (INTEGRAÇÃO) Atualiza a data da última doação no perfil do usuário
     if (novaDoacao.usuario?.id) {
       await UsuarioRepository.update(novaDoacao.usuario.id, {
         data_ultima_doacao: novaDoacao.data_doacao,
-        // Opcional: Você pode definir o usuário como inapto para doar por um período
-        esta_apto_para_doar: false, 
+        esta_apto_para_doar: false,
       });
 
       await redisClient.del(`usuario_${novaDoacao.usuario.id}`);
@@ -26,7 +23,7 @@ export class DoacaoService {
   static async getAll() {
     return await DoacaoRepository.findAll();
   }
-  
+
   static async getById(id) {
     return await DoacaoRepository.findById(id);
   }

@@ -1,7 +1,6 @@
 import { EntitySchema } from "typeorm";
 
 export const Notificacao = new EntitySchema({
-  // Este 'name' deve ser idêntico ao 'target' na relação do Usuario
   name: "Notificacao",
   tableName: "notificacoes",
   columns: {
@@ -15,12 +14,12 @@ export const Notificacao = new EntitySchema({
     },
     tipo_notificacao: {
       type: "enum",
-      enum: ['PUSH_APP', 'EMAIL', 'WHATSAPP'],
+      enum: ["PUSH_APP", "EMAIL", "WHATSAPP"],
     },
     status: {
       type: "enum",
-      enum: ['ENVIADO', 'FALHOU', 'PENDENTE'],
-      default: 'PENDENTE',
+      enum: ["ENVIADO", "FALHOU", "PENDENTE"],
+      default: "PENDENTE",
     },
     evento_gatilho: {
       type: "varchar",

@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as AuthSession from "expo-auth-session";
 import { useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Alert,
   ScrollView,
@@ -11,8 +11,11 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  ActivityIndicator,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { GOOGLE_OAUTH_CONFIG } from "../config/auth";
+import { loginWithGoogle } from "../services/api";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -25,55 +28,65 @@ export default function RegisterScreen() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const discovery = AuthSession.useAutoDiscovery('https://accounts.google.com');
+
+  const [request, response, promptAsync] = AuthSession.useAuthRequest(
+    {
+      clientId: GOOGLE_OAUTH_CONFIG.clientId,
+      scopes: GOOGLE_OAUTH_CONFIG.scopes,
+      redirectUri: AuthSession.makeRedirectUri({ useProxy: true }),
+      responseType: 'id_token',
+    },
+    discovery
+  );
+
+  useEffect(() => {
+    const handleAuth = async (id_token) => {
+      try {
+        const apiResponse = await loginWithGoogle(id_token);
+
+        await AsyncStorage.setItem("user_token", apiResponse.token);
+        await AsyncStorage.setItem("user_data", JSON.stringify(apiResponse.user));
+
+        router.replace("/(tabs)");
+      } catch (error) {
+        Alert.alert("Erro", "Falha ao se comunicar com o servidor.");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (response?.type === 'success') {
+      const { id_token } = response.params;
+      handleAuth(id_token);
+    } else if (response?.type === 'error') {
+      Alert.alert("Erro", "Falha na autenticação com o Google.");
+      setIsLoading(false);
+    }
+  }, [response]);
 
   const handleRegister = () => {
     if (!fullName || !birthYear || !email || !password || !confirmPassword) {
       Alert.alert("Erro", "Por favor, preencha todos os campos");
       return;
     }
-
     if (password !== confirmPassword) {
       Alert.alert("Erro", "As senhas não coincidem");
       return;
     }
-
     if (password.length < 6) {
       Alert.alert("Erro", "A senha deve ter pelo menos 6 caracteres");
       return;
     }
-
-    // Navegar diretamente para a home após cadastro
+    // Lógica de registro com email/senha (a ser implementada)
     router.replace("/(tabs)");
   };
 
   const handleGoogleRegister = async () => {
-    try {
-      const redirectUri = AuthSession.makeRedirectUri({});
-
-      const request = new AuthSession.AuthRequest({
-        clientId: GOOGLE_OAUTH_CONFIG.clientId,
-        scopes: GOOGLE_OAUTH_CONFIG.scopes,
-        redirectUri,
-        responseType: AuthSession.ResponseType.Code,
-      });
-
-      const discovery = await AuthSession.fetchDiscoveryAsync(
-        "https://accounts.google.com"
-      );
-
-      const result = await request.promptAsync(discovery);
-
-      if (result.type === "success") {
-        Alert.alert("Sucesso", "Cadastro com Google realizado com sucesso!", [
-          { text: "OK", onPress: () => router.push("/(tabs)") },
-        ]);
-      } else {
-        Alert.alert("Erro", "Cadastro cancelado pelo usuário");
-      }
-    } catch (error) {
-      console.error("Erro no Google Register:", error);
-      Alert.alert("Erro", "Erro inesperado ao fazer cadastro com Google");
-    }
+    setIsLoading(true);
+    await promptAsync();
   };
 
   return (

@@ -5,12 +5,13 @@ import 'react-native-reanimated';
 import '../global.css';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { AuthProvider } from '../contexts/AuthContext';
 
 export const unstable_settings = {
   initialRouteName: 'login',
 };
 
-export default function RootLayout() {
+function RootLayoutNav() {
   const colorScheme = useColorScheme();
 
   return (
@@ -25,5 +26,13 @@ export default function RootLayout() {
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <AuthProvider>
+      <RootLayoutNav />
+    </AuthProvider>
   );
 }

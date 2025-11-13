@@ -11,8 +11,11 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  ActivityIndicator,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { GOOGLE_OAUTH_CONFIG } from "../config/auth";
+import { loginWithGoogle } from "../services/api";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -21,46 +24,57 @@ export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(() => {}, []);
+  const discovery = AuthSession.useAutoDiscovery('https://accounts.google.com');
+
+  const [request, response, promptAsync] = AuthSession.useAuthRequest(
+    {
+      clientId: GOOGLE_OAUTH_CONFIG.clientId,
+      scopes: GOOGLE_OAUTH_CONFIG.scopes,
+      redirectUri: AuthSession.makeRedirectUri({ useProxy: true }),
+      responseType: 'id_token',
+    },
+    discovery
+  );
+
+  useEffect(() => {
+    const handleAuth = async (id_token) => {
+      try {
+        const apiResponse = await loginWithGoogle(id_token);
+
+        await AsyncStorage.setItem("user_token", apiResponse.token);
+        await AsyncStorage.setItem("user_data", JSON.stringify(apiResponse.user));
+
+        router.replace("/(tabs)");
+      } catch (error) {
+        Alert.alert("Erro", "Falha ao se comunicar com o servidor.");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (response?.type === 'success') {
+      const { id_token } = response.params;
+      handleAuth(id_token);
+    } else if (response?.type === 'error') {
+      Alert.alert("Erro", "Falha na autenticação com o Google.");
+      setIsLoading(false);
+    }
+  }, [response]);
 
   const handleLogin = () => {
     if (!email || !password) {
       Alert.alert("Erro", "Por favor, preencha todos os campos");
       return;
     }
-
-    // Navegar diretamente sem alerta
+    // Lógica de login com email/senha (a ser implementada)
     router.replace("/(tabs)");
   };
 
   const handleGoogleLogin = async () => {
-    try {
-      const redirectUri = AuthSession.makeRedirectUri({});
-
-      const request = new AuthSession.AuthRequest({
-        clientId: GOOGLE_OAUTH_CONFIG.clientId,
-        scopes: GOOGLE_OAUTH_CONFIG.scopes,
-        redirectUri,
-        responseType: AuthSession.ResponseType.Code,
-      });
-
-      const discovery = await AuthSession.fetchDiscoveryAsync(
-        "https://accounts.google.com"
-      );
-
-      const result = await request.promptAsync(discovery);
-
-      if (result.type === "success") {
-        Alert.alert("Sucesso", "Login com Google realizado com sucesso!");
-        router.push("/(tabs)");
-      } else {
-        Alert.alert("Erro", "Login cancelado pelo usuário");
-      }
-    } catch (error) {
-      console.error("Erro no Google Login:", error);
-      Alert.alert("Erro", "Erro inesperado ao fazer login com Google");
-    }
+    setIsLoading(true);
+    await promptAsync();
   };
 
   const handleForgotPassword = () => {

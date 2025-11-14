@@ -1,8 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import * as AuthSession from "expo-auth-session";
 import { useRouter } from "expo-router";
-import * as WebBrowser from "expo-web-browser";
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import {
   Alert,
   Image,
@@ -11,55 +9,52 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  ActivityIndicator,
+  SafeAreaView,
 } from "react-native";
-import { GOOGLE_OAUTH_CONFIG } from "../config/auth";
-
-WebBrowser.maybeCompleteAuthSession();
+import { useAuth } from "../contexts/AuthContext";
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { signIn, signInWithGoogle } = useAuth();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(() => {}, []);
-
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (!email || !password) {
       Alert.alert("Erro", "Por favor, preencha todos os campos");
       return;
     }
 
-    // Navegar diretamente sem alerta
-    router.replace("/(tabs)");
+    setIsLoading(true);
+    try {
+      await signIn(email, password);
+      // A navegação será tratada automaticamente pelo AuthContext/_layout
+    } catch (error: any) {
+      console.error("Erro no login:", error);
+      Alert.alert("Erro no Login", error.message || "Email ou senha inválidos");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleGoogleLogin = async () => {
+    setIsLoading(true);
     try {
-      const redirectUri = AuthSession.makeRedirectUri({});
-
-      const request = new AuthSession.AuthRequest({
-        clientId: GOOGLE_OAUTH_CONFIG.clientId,
-        scopes: GOOGLE_OAUTH_CONFIG.scopes,
-        redirectUri,
-        responseType: AuthSession.ResponseType.Code,
-      });
-
-      const discovery = await AuthSession.fetchDiscoveryAsync(
-        "https://accounts.google.com"
-      );
-
-      const result = await request.promptAsync(discovery);
-
-      if (result.type === "success") {
-        Alert.alert("Sucesso", "Login com Google realizado com sucesso!");
-        router.push("/(tabs)");
-      } else {
-        Alert.alert("Erro", "Login cancelado pelo usuário");
-      }
-    } catch (error) {
+      await signInWithGoogle();
+    } catch (error: any) {
       console.error("Erro no Google Login:", error);
-      Alert.alert("Erro", "Erro inesperado ao fazer login com Google");
+      if (error.code !== "12501") {
+        Alert.alert(
+          "Erro",
+          error.message || "Erro inesperado ao fazer login com Google"
+        );
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -68,7 +63,7 @@ export default function LoginScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Image
           source={require("../assets/images/logo_hemose.png")}
@@ -89,6 +84,7 @@ export default function LoginScreen() {
             onChangeText={setEmail}
             keyboardType="email-address"
             autoCapitalize="none"
+            editable={!isLoading}
           />
         </View>
 
@@ -102,10 +98,12 @@ export default function LoginScreen() {
               value={password}
               onChangeText={setPassword}
               secureTextEntry={!showPassword}
+              editable={!isLoading}
             />
             <TouchableOpacity
               style={styles.eyeButton}
               onPress={() => setShowPassword(!showPassword)}
+              disabled={isLoading}
             >
               <Ionicons
                 name={showPassword ? "eye-off" : "eye"}
@@ -116,12 +114,20 @@ export default function LoginScreen() {
           </View>
         </View>
 
-        <TouchableOpacity onPress={handleForgotPassword}>
+        <TouchableOpacity onPress={handleForgotPassword} disabled={isLoading}>
           <Text style={styles.forgotPassword}>Esqueceu sua senha?</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
-          <Text style={styles.loginButtonText}>Entrar</Text>
+        <TouchableOpacity
+          style={styles.loginButton}
+          onPress={handleLogin}
+          disabled={isLoading}
+        >
+          {isLoading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.loginButtonText}>Entrar</Text>
+          )}
         </TouchableOpacity>
 
         <Text style={styles.orText}>ou</Text>
@@ -129,19 +135,29 @@ export default function LoginScreen() {
         <TouchableOpacity
           style={styles.googleButton}
           onPress={handleGoogleLogin}
+          disabled={isLoading}
         >
-          <Ionicons name="logo-google" size={20} color="white" />
-          <Text style={styles.googleButtonText}>Entrar com o Google</Text>
+          {isLoading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <>
+              <Ionicons name="logo-google" size={20} color="white" />
+              <Text style={styles.googleButtonText}>Entrar com o Google</Text>
+            </>
+          )}
         </TouchableOpacity>
 
         <View style={styles.registerContainer}>
           <Text style={styles.registerText}>Não tem uma conta? </Text>
-          <TouchableOpacity onPress={() => router.push("/register")}>
+          <TouchableOpacity
+            onPress={() => router.push("/register")}
+            disabled={isLoading}
+          >
             <Text style={styles.registerLink}>Crie uma conta</Text>
           </TouchableOpacity>
         </View>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 

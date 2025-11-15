@@ -8,7 +8,7 @@ import { StatusBar } from "expo-status-bar";
 import "react-native-reanimated";
 import "../global.css";
 
-import { useColorScheme } from "@/hooks/useColorScheme";
+import { useColorScheme } from "../hooks/useColorScheme";
 import { AuthProvider, useAuth } from "../contexts/AuthContext";
 import React, { useEffect, useState, createContext, useContext } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";

@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "896137778307",
+    "project_id": "gota-a-gota---fsph",
+    "storage_bucket": "gota-a-gota---fsph.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:896137778307:android:f510b987dea667fba4b7b6",
+        "android_client_info": {
+          "package_name": "com.lauroaug.gotaagotafsph"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "896137778307-sffk5v7bt1cu1qcktrmu255l5f3t2hn1.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCRyqIgIAhMAcSzQt8qvldFkJt7b7JtifQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "896137778307-sffk5v7bt1cu1qcktrmu255l5f3t2hn1.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "896137778307-p0laedr2hc2cojn3lrtjfd3ri5tef2u7.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.lauroaug.gotaagotafsph"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

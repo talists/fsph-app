@@ -1,19 +1,24 @@
-// services/googleAuthNative.ts (Corrigido para Tipagem)
+// services/googleAuthNative.ts
 import {
   GoogleSignin,
   User as GoogleUser,
+  statusCodes,
 } from "@react-native-google-signin/google-signin";
 
-// Use o ID de Cliente WEB, pois o SDK nativo faz o mapeamento para Android/iOS internamente
 const WEB_CLIENT_ID =
-  "896137778307-v0gvr801j42k4ua42o71jbv9jkkqnvit.apps.googleusercontent.com";
+  "896137778307-sffk5v7bt1cu1qcktrmu255l5f3t2hn1.apps.googleusercontent.com";
 
+const IOS_CLIENT_ID =
+  "896137778307-p0laedr2hc2cojn3lrtjfd3ri5tef2u7.apps.googleusercontent.com";
+
+// Configuração do Google SignIn
 GoogleSignin.configure({
   webClientId: WEB_CLIENT_ID,
+  iosClientId: IOS_CLIENT_ID,
   offlineAccess: true,
+  scopes: ["profile", "email"],
 });
 
-// ⬇️ Definindo uma interface de retorno clara ⬇️
 export interface NativeSignInResult {
   idToken: string;
   user: GoogleUser;
@@ -21,24 +26,64 @@ export interface NativeSignInResult {
 
 export const signInWithGoogleNative = async (): Promise<NativeSignInResult> => {
   try {
-    await GoogleSignin.hasPlayServices();
+    await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
 
-    // 1. Inicia o fluxo de login nativo
-    const signInResponse = await GoogleSignin.signIn();
+    const response = await GoogleSignin.signIn();
 
-    // 2. ⬇️ CORREÇÃO: Acessa as propriedades diretamente com a certeza de que existem ⬇️
-    //    Usamos 'as any' para contornar o erro de tipagem na importação da biblioteca
-    const idToken = (signInResponse as any).idToken;
-    const user = (signInResponse as any).user;
-
-    if (!idToken || !user) {
-      throw new Error("Dados de usuário ou ID Token não recebidos do Google.");
+    if (!response.data?.idToken) {
+      throw new Error("ID Token não recebido do Google");
     }
 
-    // O retorno agora corresponde à interface NativeSignInResult
-    return { idToken, user };
-  } catch (error) {
+    if (!response.data?.user) {
+      throw new Error("Dados do usuário não recebidos do Google");
+    }
+
+    return {
+      idToken: response.data.idToken,
+      user: response.data.user,
+    } as any;
+  } catch (error: any) {
     console.error("❌ Erro no Sign-In Nativo:", error);
+
+    if (error.code === statusCodes.SIGN_IN_CANCELLED) {
+      throw new Error("Login cancelado pelo usuário");
+    } else if (error.code === statusCodes.IN_PROGRESS) {
+      throw new Error("Login já em andamento");
+    } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+      throw new Error("Google Play Services não disponível");
+    }
+
     throw error;
+  }
+};
+
+export const signOutFromGoogle = async (): Promise<void> => {
+  try {
+    await GoogleSignin.signOut();
+    console.log("✅ Logout do Google realizado");
+  } catch (error) {
+    console.error("❌ Erro ao fazer logout do Google:", error);
+  }
+};
+
+// ✔️ Maneira correta de verificar se está logado
+export const isSignedIn = async (): Promise<boolean> => {
+  try {
+    const user = await GoogleSignin.getCurrentUser();
+    return user != null;
+  } catch (error) {
+    console.error("Não está logado", error);
+    return false;
+  }
+};
+
+// ✔️ Maneira correta de obter o usuário atual
+export const getCurrentUser = async (): Promise<GoogleUser | null> => {
+  try {
+    const user = await GoogleSignin.getCurrentUser();
+    return user;
+  } catch (error) {
+    console.error("❌ Erro ao obter usuário atual:", error);
+    return null;
   }
 };

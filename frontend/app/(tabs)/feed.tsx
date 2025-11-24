@@ -9,7 +9,6 @@ import {
   Image,
   Modal,
   RefreshControl,
-  SafeAreaView,
   StyleSheet,
   Text,
   TextInput,
@@ -17,7 +16,7 @@ import {
   View,
   ImageSourcePropType,
 } from "react-native";
-
+import { SafeAreaView } from "react-native-safe-area-context";
 interface Post {
   id: number;
   usuario: {

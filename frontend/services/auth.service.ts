@@ -13,6 +13,14 @@ export interface User {
   email: string;
   tipo_sanguineo?: string;
   url_foto_perfil?: string;
+  cpf?: string;
+  data_nascimento?: string;
+  sexo?: "M" | "F";
+  data_ultima_doacao?: string;
+  numero_telefone?: string;
+  cidade?: string;
+  estado?: string;
+  esta_apto_para_doar?: boolean;
 }
 export interface AuthResponse {
   accessToken: string;

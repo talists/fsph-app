@@ -7,7 +7,7 @@ import { Stack, useRouter, SplashScreen } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import "react-native-reanimated";
 import "../global.css";
-
+import { View } from "react-native";
 import { useColorScheme } from "../hooks/useColorScheme";
 import { AuthProvider, useAuth } from "../contexts/AuthContext";
 import React, { useEffect, useState, createContext, useContext } from "react";
@@ -52,18 +52,40 @@ function RootLayoutNav() {
 
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="index" />
-        <Stack.Screen name="login" />
-        <Stack.Screen name="register" />
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen
-          name="modal"
-          options={{ presentation: "modal", title: "Modal" }}
-        />
-        <Stack.Screen name="+not-found" />
-      </Stack>
-      <StatusBar style="auto" />
+      <View style={{ flex: 1 }}>
+        <StatusBar style="auto" />
+        <Stack>
+          <Stack.Screen name="splash1" options={{ headerShown: false }} />
+          <Stack.Screen name="splash2" options={{ headerShown: false }} />
+          <Stack.Screen name="login" options={{ headerShown: false }} />
+          <Stack.Screen name="register" options={{ headerShown: false }} />
+          <Stack.Screen
+            name="profile"
+            options={{
+              headerShown: true,
+              title: "Perfil",
+              headerStyle: { backgroundColor: "#E73645" },
+              headerTintColor: "white",
+              headerTitleStyle: { fontWeight: "700" },
+            }}
+          />
+          <Stack.Screen
+            name="faq"
+            options={{
+              headerShown: true,
+              title: "FAQ",
+              headerStyle: { backgroundColor: "#E73645" },
+              headerTintColor: "white",
+              headerTitleStyle: { fontWeight: "700" },
+            }}
+          />
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen
+            name="modal"
+            options={{ presentation: "modal", title: "Modal" }}
+          />
+        </Stack>
+      </View>
     </ThemeProvider>
   );
 }

@@ -4,8 +4,8 @@
     "slug": "gotaagotafsph",
     "owner": "lauroaug",
     "version": "1.0.0",
-    "description": "FSPH Test App - Sistema de doação de sangue",
-    "orientation": "portrait",
+    "description": "FSPH App - Sistema de doação de sangue",
+    "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "gotaagotafsph",
     "userInterfaceStyle": "automatic",
@@ -64,7 +64,7 @@
         "expo-build-properties",
         {
           "android": {
-            "gradlePluginVersion": "7.3.0"
+            "usesCleartextTraffic": true
           }
         }
       ]

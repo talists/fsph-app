@@ -17,19 +17,49 @@ import {
   ImageSourcePropType,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-interface Post {
-  id: number;
-  usuario: {
-    id: number;
-    nome: string;
-    url_foto_perfil?: string;
-  };
-  legenda: string;
+import { feedService, Post as ServicePost } from "@/services/feed.service";
+
+interface Post extends Omit<ServicePost, "url_imagem"> {
   url_imagem: string | ImageSourcePropType;
-  criado_em: string;
 }
 
-// Componente separado para o post
+const mockPosts: Post[] = [
+  {
+    id: -1,
+    usuario: {
+      id: 999,
+      nome: "Maria Silva",
+      url_foto_perfil: undefined,
+    },
+    legenda: "Doei sangue hoje no Hemose! Cada gota conta! 🩸❤️",
+    url_imagem: require("../../assets/images/doacao_1.jpeg"),
+    criado_em: new Date().toISOString(),
+  },
+  {
+    id: -2,
+    usuario: {
+      id: 998,
+      nome: "João Santos",
+      url_foto_perfil: undefined,
+    },
+    legenda: "Primeira doação do ano! Sensação incrível de ajudar.",
+    url_imagem: require("../../assets/images/doacao_2.jpeg"),
+    criado_em: new Date().toISOString(),
+  },
+  {
+    id: -3,
+    usuario: {
+      id: 997,
+      nome: "Ana Costa",
+      url_foto_perfil: undefined,
+    },
+    legenda: "10ª doação! Orgulhosa de poder ajudar quem precisa 💪❤️",
+    url_imagem: require("../../assets/images/doacao_3.jpeg"),
+    criado_em: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+  },
+];
+
+// --- COMPONENTE DE ITEM DO POST ---
 const PostItem = React.memo(
   ({
     item,
@@ -41,13 +71,13 @@ const PostItem = React.memo(
     const [imageError, setImageError] = useState(false);
 
     const handleImageError = () => {
-      console.log("Erro ao carregar imagem:", item.url_imagem);
+      if (imageError) return;
+      console.log(
+        `❌ Erro imagem Post ${item.id}. URL Tentada:`,
+        item.url_imagem
+      );
       setImageError(true);
       onImageError(item.id);
-    };
-
-    const handleImageLoad = () => {
-      console.log("Imagem carregada com sucesso:", item.url_imagem);
     };
 
     return (
@@ -81,7 +111,6 @@ const PostItem = React.memo(
             style={styles.postImage}
             resizeMode="cover"
             onError={handleImageError}
-            onLoad={handleImageLoad}
           />
         ) : (
           <View style={[styles.postImage, styles.imageErrorContainer]}>
@@ -95,43 +124,18 @@ const PostItem = React.memo(
   }
 );
 
+// --- TELA PRINCIPAL ---
 export default function FeedScreen() {
   const router = useRouter();
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Estados de Upload
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
   const [description, setDescription] = useState("");
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const [imageErrors, setImageErrors] = useState<{ [key: number]: boolean }>(
-    {}
-  );
-
-  // Mock data para demonstração
-  const mockPosts: Post[] = [
-    {
-      id: 1,
-      usuario: { id: 1, nome: "Maria Silva" },
-      legenda: "Doei sangue hoje no Hemose! Cada gota conta! 🩸❤️",
-      url_imagem: require("../../assets/images/doacao_1.jpeg"),
-      criado_em: new Date().toISOString(),
-    },
-    {
-      id: 2,
-      usuario: { id: 2, nome: "João Santos" },
-      legenda:
-        "Primeira doação do ano! Sensação incrível de ajudar outras pessoas.",
-      url_imagem: require("../../assets/images/doacao_2.jpeg"),
-      criado_em: new Date().toISOString(),
-    },
-    {
-      id: 3,
-      usuario: { id: 3, nome: "Ana Costa" },
-      legenda: "10ª doação! Orgulhosa de poder ajudar quem precisa 💪❤️",
-      url_imagem: require("../../assets/images/doacao_3.jpeg"),
-      criado_em: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-    },
-  ];
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     loadFeed();
@@ -141,12 +145,21 @@ export default function FeedScreen() {
     try {
       if (!isRefresh) setLoading(true);
 
-      // Simular carregamento
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const response = await feedService.getFeedPosts(1, 20);
+      const realPosts = response.posts;
 
-      setPosts(mockPosts);
+      const mergedPosts: Post[] = [...realPosts, ...mockPosts];
+
+      setPosts(mergedPosts);
     } catch (error: any) {
-      Alert.alert("Erro", "Erro ao carregar feed");
+      console.error("Erro ao buscar feed:", error);
+
+      if (isRefresh || loading) {
+        setPosts(mockPosts);
+        if (!isRefresh) {
+          console.log("Mostrando modo offline (apenas mocks)");
+        }
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -157,86 +170,46 @@ export default function FeedScreen() {
     setRefreshing(true);
     loadFeed(true);
   };
-
   const selectImage = async () => {
     try {
-      // Solicitar permissões
       const permissionResult =
         await ImagePicker.requestMediaLibraryPermissionsAsync();
-
-      if (permissionResult.granted === false) {
+      if (!permissionResult.granted) {
         Alert.alert(
           "Permissão necessária",
-          "É necessário permitir o acesso à galeria para selecionar uma foto."
+          "É necessário permitir o acesso à galeria."
         );
         return;
       }
-
-      // Mostrar opções de seleção
       Alert.alert("Selecionar Foto", "Escolha uma opção:", [
-        {
-          text: "Galeria",
-          onPress: () => pickImageFromGallery(),
-        },
-        {
-          text: "Câmera",
-          onPress: () => pickImageFromCamera(),
-        },
-        {
-          text: "Cancelar",
-          style: "cancel",
-        },
+        { text: "Galeria", onPress: () => pickImageFromGallery() },
+        { text: "Câmera", onPress: () => pickImageFromCamera() },
+        { text: "Cancelar", style: "cancel" },
       ]);
     } catch (error) {
-      console.error("Erro ao solicitar permissões:", error);
       Alert.alert("Erro", "Erro ao acessar a galeria");
     }
   };
 
   const pickImageFromGallery = async () => {
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.8,
-      });
-
-      if (!result.canceled) {
-        setSelectedImage(result.assets[0].uri);
-      }
-    } catch (error) {
-      console.error("Erro ao selecionar imagem da galeria:", error);
-      Alert.alert("Erro", "Erro ao selecionar imagem da galeria");
-    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.8,
+    });
+    if (!result.canceled) setSelectedImage(result.assets[0].uri);
   };
 
   const pickImageFromCamera = async () => {
-    try {
-      const permissionResult =
-        await ImagePicker.requestCameraPermissionsAsync();
-
-      if (permissionResult.granted === false) {
-        Alert.alert(
-          "Permissão necessária",
-          "É necessário permitir o acesso à câmera para tirar uma foto."
-        );
-        return;
-      }
-
-      const result = await ImagePicker.launchCameraAsync({
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.8,
-      });
-
-      if (!result.canceled) {
-        setSelectedImage(result.assets[0].uri);
-      }
-    } catch (error) {
-      console.error("Erro ao tirar foto:", error);
-      Alert.alert("Erro", "Erro ao tirar foto");
-    }
+    const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permissionResult.granted) return;
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.8,
+    });
+    if (!result.canceled) setSelectedImage(result.assets[0].uri);
   };
 
   const handleSubmitPost = async () => {
@@ -244,38 +217,47 @@ export default function FeedScreen() {
       Alert.alert("Atenção", "Por favor, adicione uma descrição");
       return;
     }
-
     if (!selectedImage) {
       Alert.alert("Atenção", "Por favor, selecione uma foto da sua doação");
       return;
     }
 
     try {
-      // Simular criação de post
-      const newPost: Post = {
-        id: posts.length + 1,
-        usuario: { id: 1, nome: "Você" },
-        legenda: description.trim(),
-        url_imagem: selectedImage,
-        criado_em: new Date().toISOString(),
-      };
+      setIsSubmitting(true);
 
-      setPosts([newPost, ...posts]);
+      const formData = new FormData();
+      formData.append("description", description.trim());
+
+      const filename = selectedImage.split("/").pop();
+      const match = /\.(\w+)$/.exec(filename || "");
+      const type = match ? `image/${match[1]}` : `image/jpeg`;
+
+      formData.append("url_imagem", {
+        uri: selectedImage,
+        name: filename || "photo.jpg",
+        type: type,
+      } as any);
+
+      await feedService.createPost(formData);
+
+      Alert.alert("Sucesso", "Sua doação foi publicada!");
+
       setDescription("");
       setSelectedImage(null);
       setUploadModalVisible(false);
-
-      Alert.alert("Sucesso", "Post criado com sucesso!");
+      loadFeed(true);
     } catch (error: any) {
-      Alert.alert("Erro", "Erro ao criar post");
+      console.error(error);
+      Alert.alert("Erro", error.message || "Erro ao criar post");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const renderPost = ({ item }: { item: Post }) => {
     const handleImageError = (postId: number) => {
-      setImageErrors((prev) => ({ ...prev, [postId]: true }));
+      console.log(`Erro visual renderizando post ${postId}`);
     };
-
     return <PostItem item={item} onImageError={handleImageError} />;
   };
 
@@ -292,7 +274,7 @@ export default function FeedScreen() {
     </TouchableOpacity>
   );
 
-  if (loading) {
+  if (loading && !refreshing && posts.length === 0) {
     return (
       <SafeAreaView style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#E73645" />
@@ -303,7 +285,7 @@ export default function FeedScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
+      {/* Header Fixo */}
       <View style={styles.header}>
         <Image
           source={require("../../assets/images/gota_a_gota.png")}
@@ -315,7 +297,6 @@ export default function FeedScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Feed */}
       <FlatList
         data={posts}
         renderItem={renderPost}
@@ -331,6 +312,11 @@ export default function FeedScreen() {
         }
         showsVerticalScrollIndicator={false}
         style={styles.feedList}
+        ListEmptyComponent={
+          <View style={{ alignItems: "center", marginTop: 50 }}>
+            <Text style={{ color: "#999" }}>Nenhuma publicação ainda.</Text>
+          </View>
+        }
       />
 
       {/* Modal de Upload */}
@@ -338,71 +324,88 @@ export default function FeedScreen() {
         visible={uploadModalVisible}
         animationType="slide"
         transparent={true}
+        onRequestClose={() => {
+          if (!isSubmitting) setUploadModalVisible(false);
+        }}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Nova Doação</Text>
-              <TouchableOpacity
-                onPress={() => {
-                  setUploadModalVisible(false);
-                  setDescription("");
-                  setSelectedImage(null);
-                }}
-              >
-                <Ionicons name="close" size={24} color="#333" />
-              </TouchableOpacity>
-            </View>
-
-            {/* Área de seleção de imagem */}
-            <View style={styles.imageSelector}>
-              <TouchableOpacity
-                style={styles.imagePlaceholder}
-                onPress={selectImage}
-                activeOpacity={0.7}
-              >
-                {selectedImage ? (
-                  <Image
-                    source={{ uri: selectedImage }}
-                    style={styles.selectedImage}
-                    resizeMode="cover"
-                  />
-                ) : (
-                  <>
-                    <Ionicons name="camera" size={40} color="#999" />
-                    <Text style={styles.imagePlaceholderText}>
-                      Toque para selecionar uma foto
-                    </Text>
-                  </>
-                )}
-              </TouchableOpacity>
-              {selectedImage && (
+              {!isSubmitting && (
                 <TouchableOpacity
-                  style={styles.removeImageButton}
-                  onPress={() => setSelectedImage(null)}
+                  onPress={() => {
+                    setUploadModalVisible(false);
+                    setDescription("");
+                    setSelectedImage(null);
+                  }}
                 >
-                  <Text style={styles.removeImageText}>Remover foto</Text>
+                  <Ionicons name="close" size={24} color="#333" />
                 </TouchableOpacity>
               )}
             </View>
 
-            {/* Campo de descrição */}
-            <TextInput
-              style={styles.descriptionInput}
-              placeholder="Conte sobre sua doação..."
-              value={description}
-              onChangeText={setDescription}
-              multiline
-              maxLength={500}
-            />
-
-            {/* Botão de enviar */}
-            <TouchableOpacity
-              style={styles.submitButton}
-              onPress={handleSubmitPost}
+            {/* Área de conteúdo do Modal (Bloqueia durante envio) */}
+            <View
+              style={{ opacity: isSubmitting ? 0.5 : 1 }}
+              pointerEvents={isSubmitting ? "none" : "auto"}
             >
-              <Text style={styles.submitButtonText}>Publicar</Text>
-            </TouchableOpacity>
+              <View style={styles.imageSelector}>
+                <TouchableOpacity
+                  style={styles.imagePlaceholder}
+                  onPress={selectImage}
+                  activeOpacity={0.7}
+                >
+                  {selectedImage ? (
+                    <Image
+                      source={{ uri: selectedImage }}
+                      style={styles.selectedImage}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <>
+                      <Ionicons name="camera" size={40} color="#999" />
+                      <Text style={styles.imagePlaceholderText}>
+                        Toque para selecionar uma foto
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+                {selectedImage && (
+                  <TouchableOpacity
+                    style={styles.removeImageButton}
+                    onPress={() => setSelectedImage(null)}
+                  >
+                    <Text style={styles.removeImageText}>Remover foto</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              <TextInput
+                style={styles.descriptionInput}
+                placeholder="Conte sobre sua doação..."
+                value={description}
+                onChangeText={setDescription}
+                multiline
+                maxLength={500}
+                editable={!isSubmitting}
+              />
+
+              <TouchableOpacity
+                style={[
+                  styles.submitButton,
+                  isSubmitting && { backgroundColor: "#ccc" },
+                ]}
+                onPress={handleSubmitPost}
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
+                  <ActivityIndicator color="#FFF" />
+                ) : (
+                  <Text style={styles.submitButtonText}>Publicar</Text>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>

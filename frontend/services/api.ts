@@ -1,36 +1,31 @@
-import axios, { type AxiosError } from "axios";
-import { Platform } from "react-native";
+// services/api.ts
+import axios, { type AxiosError, type InternalAxiosRequestConfig } from "axios";
 import { tokenStorage } from "./tokenStorage";
 
-// Define as URLs para cada ambiente
-// Android Emulator usa 10.0.2.2 para acessar o localhost da máquina
-// Web e iOS usam localhost ou o IP da máquina
-const API_URL_ANDROID = "http://10.0.2.2:3334/api";
-const API_URL_WEB_IOS = "http://localhost:3334/api";
+// ============================================================
+// CONFIGURAÇÃO ANDROID STUDIO
+// ============================================================
 
-// Escolhe a URL correta dinamicamente baseado na plataforma onde o app está rodando
-const BASE_URL = Platform.OS === "android" ? API_URL_ANDROID : API_URL_WEB_IOS;
+const BASE_URL = `http://10.0.2.2:3334/api`;
 
-console.log(
-  `[APIService] Inicializado no modo ${Platform.OS} com URL: ${BASE_URL}`
-);
+console.log(`[APIService] 🤖 Modo Emulador ativado: ${BASE_URL}`);
 
-// Cria a instância do Axios
 const apiService = axios.create({
   baseURL: BASE_URL,
-  timeout: 60000, // 60 segundos de timeout
+  timeout: 30000,
   headers: {
     Accept: "application/json",
   },
 });
 
 // ============================================================
-// Interceptor de Requisição: Injeta o Token JWT
+// Interceptors (Igual ao anterior, com correção de Tipagem)
 // ============================================================
 apiService.interceptors.request.use(
-  async (config) => {
-    // @ts-ignore - Permite passar a flag isAuthRequired na chamada
-    const isAuthRequired = config.isAuthRequired ?? true;
+  async (config: InternalAxiosRequestConfig) => {
+    const isAuthRequired = (config as any).isAuthRequired ?? true;
+
+    console.log(`[API] 📤 ${config.method?.toUpperCase()} ${config.url}`);
 
     if (isAuthRequired) {
       const token = await tokenStorage.getAccessToken();
@@ -38,53 +33,48 @@ apiService.interceptors.request.use(
         config.headers.Authorization = `Bearer ${token}`;
       }
     }
+
+    if (config.data instanceof FormData) {
+      config.headers["Content-Type"] = "multipart/form-data";
+    }
+
     return config;
   },
   (error) => Promise.reject(error)
 );
 
-// ============================================================
-// Interceptor de Resposta: Tratamento Global de Erros
-// ============================================================
 apiService.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
-    // Tratamento de Timeout
-    if (error.code === "ECONNABORTED" || error.message.includes("timeout")) {
-      return Promise.reject(
-        new Error("Timeout: O servidor demorou muito para responder.")
+    if (error.response) {
+      console.error(
+        `[API] ❌ Erro ${error.response.status}: ${JSON.stringify(
+          error.response.data
+        )}`
       );
-    }
-
-    // Tratamento de Erro de Conexão (Network Error)
-    if (
-      error.message === "Network Error" ||
-      error.message.includes("Network request failed")
-    ) {
+    } else if (error.request) {
+      console.error(`[API] ❌ Falha de Conexão em: ${BASE_URL}`);
       return Promise.reject(
         new Error(
-          "Erro de conexão: Verifique se o servidor backend está rodando e se a URL está correta."
+          "O Emulador não conseguiu conectar no Docker.\n\n" +
+            "1. Verifique se o Docker está rodando (docker ps).\n" +
+            "2. Tente acessar http://localhost:3334/api no navegador do PC."
         )
       );
     }
-
-    // Retorna o erro original para ser tratado no try/catch dos services
     return Promise.reject(error);
   }
 );
 
-/**
- * Função simples para verificar se a API está online
- */
 export const healthCheck = async (): Promise<boolean> => {
   try {
-    // @ts-ignore
-    await apiService.get("/", { isAuthRequired: false });
+    await apiService.get("/", { isAuthRequired: false, timeout: 5000 } as any);
+    console.log(`[API] 🏥 Health check OK`);
     return true;
   } catch (error) {
-    console.error("❌ Health check failed:", error);
+    console.error(`[API] ❌ Health check FALHOU.`);
     return false;
   }
 };
 
-export { apiService };
+export { apiService, BASE_URL };

@@ -57,6 +57,9 @@ export class UsuarioService {
 
     await UsuarioRepository.update(usuario.id, { refresh_token: refreshToken });
 
+    await redisClient.set(`token_usuario_${usuario.id}`, accessToken, {
+      EX: 60 * 15,
+    });
     await redisClient.del("usuarios_all");
     await redisClient.set(`usuario_${usuario.id}`, JSON.stringify(usuario), {
       EX: 3600,

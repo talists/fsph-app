@@ -245,3 +245,10 @@ class AuthService {
 }
 
 export const authService = new AuthService();
+
+// Compatibilidade: delega getMeuPerfil para profile.service
+import { profileService } from "./profile.service";
+
+export const getMeuPerfil = async (): Promise<User> => {
+  return profileService.getMeuPerfil();
+};

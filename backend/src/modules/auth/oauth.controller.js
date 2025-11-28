@@ -33,13 +33,7 @@ export const OAuthController = {
       res.status(200).json({
         accessToken,
         refreshToken,
-        usuario: {
-          id: usuario.id,
-          nome: usuario.nome,
-          email: usuario.email,
-          tipo_sanguineo: usuario.tipo_sanguineo,
-          url_foto_perfil: usuario.url_foto_perfil,
-        },
+        usuario: usuario,
       });
     } catch (err) {
       console.error("❌ [OAUTH] Erro:", err.message);

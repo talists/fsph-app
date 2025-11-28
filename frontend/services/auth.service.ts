@@ -21,6 +21,9 @@ export interface User {
   cidade?: string;
   estado?: string;
   esta_apto_para_doar?: boolean;
+  rg?: string;
+  total_doacoes?: number;
+  qt_doacoes?: number;
 }
 export interface AuthResponse {
   accessToken: string;

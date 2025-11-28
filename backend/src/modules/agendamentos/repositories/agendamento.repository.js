@@ -1,5 +1,5 @@
 // src/modules/agendamento/agendamento.repository.js
-import AppDataSource  from "../../../config/data-source.js";
+import AppDataSource from "../../../config/data-source.js";
 import { Agendamento } from "../agendamento.model.js";
 
 const repo = AppDataSource.getRepository(Agendamento);
@@ -10,14 +10,12 @@ export class AgendamentoRepository {
   }
 
   static async findAll() {
-
     return await repo.find({
       relations: ["usuario"],
     });
   }
 
   static async findById(id) {
-
     return await repo.findOne({
       where: { id },
       relations: ["usuario", "posto_coleta", "campanha"],
@@ -25,7 +23,6 @@ export class AgendamentoRepository {
   }
 
   static async findByUsuarioId(usuarioId) {
-  
     return await repo.find({
       where: { usuario: { id: usuarioId } },
       order: { dataAgendamento: "DESC" },
@@ -40,7 +37,6 @@ export class AgendamentoRepository {
   }
 
   static async remove(id) {
-
     return await repo.delete(id);
   }
 }

@@ -77,23 +77,32 @@ class DonationsService {
   /**
    * Fetch donation history from HEMOSE API
    */
-  async fetchDonationHistory(cpf: string): Promise<DonationRecord[]> {
-    try {
-      console.log("🩸 Fetching donation history for CPF:", cpf);
+  async fetchDonationHistory(cpfRaw: string): Promise<DonationRecord[]> {
+    // 1. Limpeza: Remove tudo que não for número (pontos, traços, espaços)
+    const cpf = cpfRaw ? cpfRaw.replace(/\D/g, "") : "";
 
-      // Get donor info and appointments from HEMOSE API
+    // 2. Validação: Se não tiver 11 dígitos, nem tenta buscar na API
+    if (!cpf || cpf.length !== 11) {
+      console.warn(
+        "⚠️ fetchDonationHistory ignorado: CPF inválido ou vazio:",
+        cpfRaw
+      );
+      // Retorna cache ou array vazio para não quebrar a tela
+      return this.getCachedDonations(cpf || "unknown");
+    }
+
+    try {
+      console.log("🩸 Buscando histórico para CPF (limpo):", cpf);
+
       const [doadorInfo, agendamentos] = await Promise.all([
         getDoadorInfoByCPF(cpf),
         getAgendamentosByCPF(cpf),
       ]);
 
-      console.log("📊 Donor info:", doadorInfo);
-      console.log("📅 Appointments:", agendamentos);
+      // ... resto do código (processamento dos dados) continua igual ...
 
-      // Transform HEMOSE data to our format
       const donations: DonationRecord[] = [];
-
-      // Process appointments
+      // (Mantenha sua lógica de mapeamento aqui)
       if (agendamentos && Array.isArray(agendamentos)) {
         agendamentos.forEach((agendamento: any, index: number) => {
           const donation: DonationRecord = {
@@ -103,7 +112,7 @@ class DonationsService {
             ),
             location: agendamento.local_nome || "HEMOSE - Aracaju",
             bloodType: doadorInfo?.tipo_sanguineo || "O+",
-            volume: 450, // Standard donation volume
+            volume: 450,
             status: this.mapStatus(agendamento.status || agendamento.situacao),
             notes: agendamento.observacoes || agendamento.notes,
             protocol: agendamento.protocolo || agendamento.protocol,
@@ -113,19 +122,17 @@ class DonationsService {
         });
       }
 
-      // Sort by date (most recent first)
       donations.sort(
         (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
       );
 
-      // Cache the data locally
       await this.cacheDonations(cpf, donations);
-
       return donations;
     } catch (error) {
+      // O erro 500 vai cair aqui
       console.warn(
-        "⚠️ Failed to fetch from HEMOSE API, using cached data:",
-        error
+        "⚠️ Falha ao buscar no HEMOSE (API Offline ou CPF não encontrado), usando cache."
+        // error
       );
       return this.getCachedDonations(cpf);
     }

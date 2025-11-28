@@ -46,10 +46,12 @@ export default function HomeScreen() {
   const [fullscreenCardVisible, setFullscreenCardVisible] = useState(false);
   const [historyModalVisible, setHistoryModalVisible] = useState(false);
 
-  // CORREÇÃO 2: Removida declaração duplicada e tipagem 'any'
-  const { user } = useAuth(); // O hook useAuth já deve retornar o tipo correto
+  const { user } = useAuth();
 
-  // Responsive calculations
+  console.log(
+    "🔍 [DEBUG] Objeto User Completo:",
+    JSON.stringify(user, null, 2)
+  );
   const { width: screenWidth } = Dimensions.get("window");
   const horizontalPadding = 32;
   const sectionMargin = 30;
@@ -603,21 +605,19 @@ export default function HomeScreen() {
         <DonorCardModal
           visible={fullscreenCardVisible}
           onClose={() => setFullscreenCardVisible(false)}
-          // Mapeando os dados do objeto User para as props do Modal
           id={user.id?.toString()}
           name={user.nome}
           bloodType={user.tipo_sanguineo || "Não informado"}
           profileImage={user.url_foto_perfil}
           cpf={user.cpf}
-          // Campos opcionais ou que podem vir de outras fontes (mock ou backend futuro)
-          lastDonation={user.data_ultima_doacao || "Nunca doou"} // Se tiver no User
-          donationCount={0} // Se tiver no User
-          rg="" // Se tiver no User
-          birthDate={
-            user.data_nascimento
-              ? new Date(user.data_nascimento).toLocaleDateString("pt-BR")
-              : ""
+          birthDate={user.data_nascimento || "Não informada"}
+          lastDonation={
+            user.data_ultima_doacao
+              ? new Date(user.data_ultima_doacao).toLocaleDateString("pt-BR")
+              : "Ainda não doou"
           }
+          donationCount={user.total_doacoes || user.qt_doacoes || 0}
+          rg={user.rg || "Não informado"}
           gender={user.sexo}
         />
       )}
@@ -629,7 +629,7 @@ export default function HomeScreen() {
         onRequestClose={() => setHistoryModalVisible(false)}
       >
         <DonationHistory
-          userId={user?.id?.toString()}
+          userId={user?.cpf}
           onClose={() => setHistoryModalVisible(false)}
           isModal={true}
         />

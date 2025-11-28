@@ -15,7 +15,7 @@ interface AuthContextData {
   signIn: (email: string, senha: string) => Promise<void>;
   signInWithGoogle: (idToken: string) => Promise<void>;
   register: (data: FormData) => Promise<void>;
-  signOut: () => void;
+  signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextData>({} as AuthContextData);
@@ -75,7 +75,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
               }
             });
         } else {
-          // ✅ Log amigável quando não há sessão (normal na primeira vez)
           if (__DEV__) {
             console.log("ℹ️ [AUTH] Nenhuma sessão anterior encontrada");
           }
@@ -92,7 +91,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   }, []);
 
   const registerForPushNotifications = async () => {
-    // Desativado no Expo Go
     if (__DEV__) {
       console.log("ℹ️ [PUSH] Notificações Push desativadas no Expo Go");
     }
@@ -102,16 +100,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const handleAuthSuccess = async (
     authData: AuthResponse | GoogleAuthResponse | RegisterResponse
   ) => {
-    const userData = authData.usuario;
+    let userData = authData.usuario;
     const accessToken =
       (authData as any).accessToken ?? (authData as any).token;
     const refreshToken = (authData as any).refreshToken ?? null;
 
-    console.log("✅ [AUTH] Autenticação bem-sucedida:", userData.email);
+    // 1. Salva tokens imediatamente para permitir requisições
+    await tokenStorage.saveTokens(accessToken, refreshToken);
 
+    // 2. 🔍 VERIFICAÇÃO DE SEGURANÇA:
+    // Se o login não trouxe dados cruciais (como CPF ou RG), buscamos o perfil completo.
+    // Isso corrige o problema do cartão vazio após o login.
+    if (!userData.cpf || !userData.rg || !userData.data_nascimento) {
+      try {
+        console.log(
+          "🔄 [AUTH] Login retornou dados parciais. Buscando perfil completo..."
+        );
+        // Chama o endpoint /meu-perfil que traz tudo (incluindo doações)
+        const perfilCompleto = await authService.getMeuPerfil();
+
+        // Mescla os dados para garantir que temos o objeto mais atual
+        userData = { ...userData, ...perfilCompleto };
+        console.log("✅ [AUTH] Perfil completo carregado via API extra.");
+      } catch (error) {
+        console.warn(
+          "⚠️ [AUTH] Falha ao buscar detalhes do perfil (usando dados básicos).",
+          error
+        );
+      }
+    }
+
+    console.log("✅ [AUTH] Dados finais do usuário:", userData.email);
+
+    // 3. Atualiza estado e storage
     setUser(userData);
     await AsyncStorage.setItem(USER_DATA_KEY, JSON.stringify(userData));
-    await tokenStorage.saveTokens(accessToken, refreshToken);
     await registerForPushNotifications();
   };
 
@@ -119,36 +142,56 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     console.log("🔐 [AUTH] Iniciando login...");
     const authData = await authService.login(email, senha);
     await handleAuthSuccess(authData);
+    // ✅ REMOVIDO: router.replace("/") - o _layout.tsx cuida disso
   };
 
   async function signInWithGoogleAccount(idToken: string) {
     console.log("🔐 [AUTH] Iniciando login com Google...");
     const authData = await authService.loginWithGoogle(idToken);
     await handleAuthSuccess(authData);
+    // ✅ REMOVIDO: router.replace("/") - o _layout.tsx cuida disso
   }
 
   const register = async (data: FormData) => {
     console.log("📝 [AUTH] Iniciando registro...");
     const authData = await authService.register(data);
     await handleAuthSuccess(authData);
+    // ✅ REMOVIDO: router.replace("/") - o _layout.tsx cuida disso
   };
 
+  /**
+   * Função interna de logout (sem notificar backend)
+   * Usada pelo useEffect quando detecta sessão inválida
+   */
   const signOutInternal = async () => {
     setUser(null);
     await tokenStorage.clearTokens();
     await AsyncStorage.removeItem(USER_DATA_KEY);
+    // ✅ REMOVIDO: router.replace("/login") - o _layout.tsx cuida disso
   };
 
+  /**
+   * Função pública de logout (notifica backend)
+   * Usada quando o usuário clica em "Sair"
+   */
   const signOut = async () => {
     console.log("👋 [AUTH] Fazendo logout...");
+
     try {
+      // Tenta notificar o backend (mas não bloqueia se falhar)
       await authService.logout();
-      console.log("✅ [AUTH] Logout concluído");
+      console.log("✅ [AUTH] Backend notificado sobre logout");
     } catch (error) {
-      console.error("⚠️ [AUTH] Erro ao notificar backend sobre logout");
+      console.warn(
+        "⚠️ [AUTH] Erro ao notificar backend, continuando logout local"
+      );
     }
 
+    // Sempre limpa os dados locais, independente do backend
     await signOutInternal();
+
+    console.log("✅ [AUTH] Logout concluído");
+    // ✅ REMOVIDO: router.replace("/login") - o _layout.tsx cuida disso
   };
 
   return (

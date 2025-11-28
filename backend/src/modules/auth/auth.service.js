@@ -37,9 +37,8 @@ export class AuthService {
 
     await redisClient.set(`token_usuario_${usuario.id}`, accessToken, {
       EX: 60 * 15,
-    }); // 15 minutos
+    });
 
-    // CORREÇÃO: Remove a senha antes de retornar e inclui todos os campos necessários
     delete usuario.senha;
     delete usuario.refresh_token;
 
@@ -52,6 +51,9 @@ export class AuthService {
         email: usuario.email,
         tipo_sanguineo: usuario.tipo_sanguineo,
         url_foto_perfil: usuario.url_foto_perfil,
+        data_nascimento: usuario.data_nascimento,
+        cpf: usuario.cpf,
+        sexo: usuario.sexo,
       },
     };
   }

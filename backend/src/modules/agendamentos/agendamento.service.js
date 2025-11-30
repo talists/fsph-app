@@ -1,6 +1,5 @@
 // src/modules/agendamento/agendamento.service.js
 import { AgendamentoRepository } from "./repositories/agendamento.repository.js";
-import { PreTriagemRepository } from "../pretriagem/repositories/pretriagem.repository.js";
 import { ExternalAgendamentoRepository } from "./repositories/external-agendamentos.repository.js";
 import FormData from "form-data";
 import { redisClient } from "../../config/redis.js";
@@ -76,8 +75,14 @@ export class AgendamentoService {
   static async getAgendamentosFSPH(cpf) {
     const key = `fsph_agendamentos_${cpf}`;
     const cached = await redisClient.get(key);
-    if (cached) return JSON.parse(cached);
+    if (cached) {
+      console.log(`🔍 [AGENDAMENTOS] Cache encontrado para CPF ${cpf}`);
+      console.log(`📦 [AGENDAMENTOS] Dados do cache:`, JSON.stringify(JSON.parse(cached), null, 2));
+      return JSON.parse(cached);
+    }
+    console.log(`🔍 [AGENDAMENTOS] Buscando na API HEMOSE para CPF ${cpf}...`);
     const data = await ExternalAgendamentoRepository.getAgendamentosDoador(cpf);
+    console.log(`📦 [AGENDAMENTOS] Dados recebidos da HEMOSE:`, JSON.stringify(data, null, 2));
     await redisClient.set(key, JSON.stringify(data), "EX", 3600);
     return data;
   }
@@ -99,47 +104,50 @@ export class AgendamentoService {
   }
 
   static async marcarAgendamento(body, arquivo) {
-    // Verificações (Correto)
-    const historico = await PreTriagemRepository.findByUsuario(body.usuario.id);
-    const ultimo = historico[0];
-    if (!ultimo || !ultimo.foi_preliminarmente_aprovado) {
-        throw new Error("Usuário não aprovado na pré-triagem");
-    }
-
-    // Upload do arquivo (Correto)
+    // Upload do arquivo se necessário
     if (arquivo) {
-        const url = await uploadToCloudflare(arquivo);
-        body.caminho_autorizacao = url;
+      const url = await uploadToCloudflare(arquivo);
+      body.caminho_autorizacao = url;
     }
 
-    // Montagem do FormData (Correto)
+    // Montagem do FormData para a API externa da HEMOSE
     const form = new FormData();
     Object.entries(body).forEach(([k, v]) => {
-        if (typeof v === "object") form.append(k, JSON.stringify(v));
-        else form.append(k, v ?? "");
+      if (typeof v === "object") form.append(k, JSON.stringify(v));
+      else form.append(k, v ?? "");
     });
 
-    // Chamada à API externa (Correto)
-    const response = await ExternalAgendamentoRepository.marcarAgendamento(form, form.getHeaders());
+    try {
+      // Chamada à API externa da HEMOSE (apenas proxy, sem salvar localmente)
+      const response = await ExternalAgendamentoRepository.marcarAgendamento(form, form.getHeaders());
+      console.log("✅ Agendamento realizado com sucesso na API HEMOSE");
+      return response;
+    } catch (apiError) {
+      // Retorna a mensagem de erro da API HEMOSE para o frontend
+      const errorMsg = apiError.response?.data?.msg || apiError.message || "Erro ao marcar agendamento";
+      console.error("❌ Erro na API HEMOSE:", errorMsg);
+      throw new Error(errorMsg);
+    }
+  }
 
-    // Salvar cópia local no seu banco de dados (AGORA COMPLETO)
-    await AgendamentoRepository.create({
-        usuario: { id: body.usuario.id },
-        tipoAgendamento: body.tipo,
-        dataAgendamento: body.data_agendamento,
-        status: "AGENDADO",
-        posto_coleta: body.id_bloco_doacao || body.id_posto_coleta ? { id: body.id_bloco_doacao || body.id_posto_coleta } : null,
-        campanha: body.id_campanha ? { id: body.id_campanha } : null,
-        
-        // ===== LINHAS FALTANDO ADICIONADAS AQUI =====
-        protocolo: response.protocolo || null,
-        caminhoAutorizacao: body.caminho_autorizacao || null
-    });
+  static async desmarcarAgendamentoFSPH(protocolo) {
+    try {
+      console.log(`🚫 [CANCELAR] Cancelando agendamento com protocolo ${protocolo}...`);
+      const response = await ExternalAgendamentoRepository.desmarcarAgendamento(protocolo);
+      console.log(`✅ [CANCELAR] Agendamento ${protocolo} cancelado com sucesso`);
 
-    // Invalidação do cache (Correto)
-    await redisClient.del(`agendamentos_usuario_${body.usuario.id}`);
-    await redisClient.del("agendamentos_all");
+      // Limpar cache de agendamentos (todos os CPFs)
+      const keys = await redisClient.keys('fsph_agendamentos_*');
+      if (keys.length > 0) {
+        await Promise.all(keys.map(key => redisClient.del(key)));
+        console.log(`🗑️ [CACHE] ${keys.length} caches de agendamentos limpos`);
+      }
 
-    return response;
-}
+      return response;
+    } catch (apiError) {
+      const errorMsg = apiError.response?.data?.msg || apiError.message || "Erro ao cancelar agendamento";
+      console.error("❌ Erro ao cancelar na API HEMOSE:", errorMsg);
+      throw new Error(errorMsg);
+    }
+  }
 }

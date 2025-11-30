@@ -13,6 +13,8 @@ import {
   RefreshControl,
   Modal,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Notifications from "expo-notifications";
 import { apiService, healthCheck } from "@/services/api";
 import {
   bancoDeSangueService,
@@ -24,6 +26,7 @@ import { Link, useRouter } from "expo-router";
 import DonorCardModal from "@/components/DonorCardModal";
 import DonationHistory from "@/components/DonationHistory";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { notificationService } from "@/services/notificacao.service";
 
 type BloodStock = TransformedBloodStock;
 
@@ -42,7 +45,22 @@ export default function HomeScreen() {
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState<boolean | null>(null);
-  const [unreadNotifications, setUnreadNotifications] = useState(3); // Mock count
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
+
+  useEffect(() => {
+    const loadUnreadCount = async () => {
+      try {
+        const readIds = await AsyncStorage.getItem('readNotificationIds');
+        const readIdsArray = readIds ? JSON.parse(readIds) : [];
+        const notifications = await Notifications.getPresentedNotificationsAsync();
+        const unreadCount = notifications.filter(n => !readIdsArray.includes(n.request.identifier)).length;
+        setUnreadNotifications(unreadCount);
+      } catch (error) {
+        console.log('Erro ao carregar notificações:', error);
+      }
+    };
+    loadUnreadCount();
+  }, []);
   const [fullscreenCardVisible, setFullscreenCardVisible] = useState(false);
   const [historyModalVisible, setHistoryModalVisible] = useState(false);
 
@@ -104,6 +122,18 @@ export default function HomeScreen() {
       setBloodStock(transformedData);
       setLastUpdate(new Date());
       setError(null);
+
+      // 🔔 VERIFICAR E ENVIAR NOTIFICAÇÕES DE ESTOQUE - TEMPORARIAMENTE DESABILITADO
+      // if (user && user.tipo_sanguineo) {
+      //   const userBloodType = user.tipo_sanguineo;
+
+      //   // Envia notificações automáticas baseadas no estoque
+      //   try {
+      //     await notificationService.checkBloodStockAndAlert(userBloodType);
+      //   } catch (notifError) {
+      //     console.error("Erro ao enviar notificações de estoque:", notifError);
+      //   }
+      // }
 
       if (user && user.tipo_sanguineo) {
         const userBloodType = user.tipo_sanguineo;
@@ -285,7 +315,14 @@ export default function HomeScreen() {
               style={styles.profileButton}
               onPress={() => router.push("/profile")}
             >
-              <Ionicons name="person-outline" size={24} color="#333" />
+              {user?.url_foto_perfil ? (
+                <Image
+                  source={{ uri: user.url_foto_perfil }}
+                  style={styles.profileButtonImage}
+                />
+              ) : (
+                <Ionicons name="person-outline" size={24} color="#333" />
+              )}
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -332,7 +369,7 @@ export default function HomeScreen() {
           <MenuItem
             icon="heart-outline"
             title="Controle de Medula"
-            onPress={() => Alert.alert("Em desenvolvimento")}
+            onPress={() => router.push("/(tabs)/doar")}
           />
           <MenuItem
             icon="bar-chart-outline"
@@ -454,7 +491,7 @@ export default function HomeScreen() {
             </View>
             <View style={styles.campaignTextContainer}>
               <Text style={styles.campaignTitle}>
-                Gota por gota, a gente salva vidas.
+                Gota a Gota, salvamos vidas.
               </Text>
               <Text style={styles.campaignSubtitle}>Junte-se à campanha!</Text>
             </View>
@@ -465,7 +502,7 @@ export default function HomeScreen() {
         <View style={styles.actionButtonsContainer}>
           <TouchableOpacity
             style={[styles.actionButton, { backgroundColor: "#FF4444" }]}
-            onPress={() => Alert.alert("Em desenvolvimento")}
+            onPress={() => router.push("/(tabs)/doar")}
           >
             <Ionicons name="heart" size={20} color="white" />
             <Text style={styles.actionButtonText}>
@@ -475,7 +512,7 @@ export default function HomeScreen() {
 
           <TouchableOpacity
             style={[styles.actionButton, { backgroundColor: "#FF4444" }]}
-            onPress={() => Alert.alert("Em desenvolvimento")}
+            onPress={() => router.push("/(tabs)/doar")}
           >
             <Ionicons name="calendar" size={20} color="white" />
             <Text style={styles.actionButtonText}>
@@ -486,8 +523,6 @@ export default function HomeScreen() {
 
         {/* Horário do HEMOSE */}
         <View style={styles.hemoseSection}>
-          <Text style={styles.sectionTitle}>Funcionamento do HEMOSE</Text>
-
           <View style={styles.horarioHeader}>
             <View style={styles.horarioHeaderIcon}>
               <Ionicons name="time-outline" size={28} color="#fff" />
@@ -710,6 +745,13 @@ const styles = StyleSheet.create({
   profileButton: {
     padding: 8,
     marginRight: 4,
+  },
+  profileButtonImage: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: "#E73645",
   },
   menuContainer: {
     flexDirection: "row",
@@ -993,6 +1035,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     overflow: "hidden",
+    marginBottom: 30,
   },
   horarioHeader: {
     backgroundColor: "#E73645",

@@ -31,13 +31,16 @@ const s3 = new S3Client({
     accessKeyId,
     secretAccessKey,
   },
+  requestHandler: {
+    requestTimeout: 60000, // 60 segundos
+  },
 });
 
 export const uploadToCloudflare = async (file) => {
   // Gera um nome de ficheiro único
   const fileExtension = file.originalname.split('.').pop();
   const fileName = `${crypto.randomBytes(16).toString('hex')}.${fileExtension}`;
-  
+
   const command = new PutObjectCommand({
     Bucket: bucketName,
     Key: fileName,
@@ -57,7 +60,7 @@ export const uploadToCloudflare = async (file) => {
 };
 
 export const deleteFromCloudflare = async (fileName) => {
-  if (!fileName) return; 
+  if (!fileName) return;
 
   const command = new DeleteObjectCommand({
     Bucket: bucketName,

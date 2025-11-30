@@ -72,10 +72,6 @@ const PostItem = React.memo(
 
     const handleImageError = () => {
       if (imageError) return;
-      console.log(
-        `❌ Erro imagem Post ${item.id}. URL Tentada:`,
-        item.url_imagem
-      );
       setImageError(true);
       onImageError(item.id);
     };
@@ -83,12 +79,19 @@ const PostItem = React.memo(
     return (
       <View style={styles.postCard}>
         <View style={styles.postHeader}>
-          <Ionicons
-            name="person-circle-outline"
-            size={40}
-            color="#666"
-            style={styles.avatar}
-          />
+          {item.usuario.url_foto_perfil ? (
+            <Image
+              source={{ uri: item.usuario.url_foto_perfil }}
+              style={styles.avatar}
+            />
+          ) : (
+            <Ionicons
+              name="person-circle-outline"
+              size={40}
+              color="#666"
+              style={styles.avatarIcon}
+            />
+          )}
           <View style={styles.userInfo}>
             <Text style={styles.username}>{item.usuario.nome}</Text>
             <Text style={styles.postTime}>
@@ -137,22 +140,46 @@ export default function FeedScreen() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Função auxiliar para debug de caracteres especiais
+  const handleDescriptionChange = (text: string) => {
+    console.log("📝 Texto digitado:", text);
+    console.log("📝 Contém 'ç':", text.includes("ç"));
+    console.log("📝 Length:", text.length);
+    setDescription(text);
+  };
+
   useEffect(() => {
     loadFeed();
   }, []);
 
   const loadFeed = async (isRefresh = false) => {
     try {
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      console.log("🔄 [FRONTEND] Carregando feed...", isRefresh ? "(refresh)" : "(initial)");
+
       if (!isRefresh) setLoading(true);
 
       const response = await feedService.getFeedPosts(1, 20);
       const realPosts = response.posts;
 
+      console.log("📊 [FRONTEND] Posts recebidos do backend:", realPosts.length);
+      console.log("📊 [FRONTEND] Total de posts:", response.totalPosts);
+      if (realPosts.length > 0) {
+        console.log("📋 [FRONTEND] Primeiro post:", {
+          id: realPosts[0].id,
+          legenda: realPosts[0].legenda?.substring(0, 30),
+          url_imagem: realPosts[0].url_imagem?.substring(0, 50)
+        });
+      }
+
       const mergedPosts: Post[] = [...realPosts, ...mockPosts];
+
+      console.log("📊 [FRONTEND] Total após merge com mocks:", mergedPosts.length);
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
       setPosts(mergedPosts);
     } catch (error: any) {
-      console.error("Erro ao buscar feed:", error);
+      console.error("❌ [FRONTEND] Erro ao buscar feed:", error);
 
       if (isRefresh || loading) {
         setPosts(mockPosts);
@@ -225,29 +252,51 @@ export default function FeedScreen() {
     try {
       setIsSubmitting(true);
 
+      console.log("📝 Descrição antes do envio:", description);
+      console.log("📝 Imagem selecionada:", selectedImage);
+
       const formData = new FormData();
+
+      // Campo de descrição
       formData.append("description", description.trim());
 
+      // Campo de imagem
       const filename = selectedImage.split("/").pop();
       const match = /\.(\w+)$/.exec(filename || "");
       const type = match ? `image/${match[1]}` : `image/jpeg`;
 
-      formData.append("url_imagem", {
+      const imageFile = {
         uri: selectedImage,
         name: filename || "photo.jpg",
         type: type,
-      } as any);
+      };
 
-      await feedService.createPost(formData);
+      console.log("📷 Arquivo de imagem:", imageFile);
+
+      formData.append("url_imagem", imageFile as any);
+
+      console.log("📤 Enviando post para o backend...");
+
+      const result = await feedService.createPost(formData);
+
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      console.log("✅ [FRONTEND] Post criado com sucesso!");
+      console.log("📦 Post retornado:", result);
+      console.log("🆔 ID do post:", result.id);
+      console.log("🖼️ URL da imagem:", result.url_imagem);
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
       Alert.alert("Sucesso", "Sua doação foi publicada!");
 
       setDescription("");
       setSelectedImage(null);
       setUploadModalVisible(false);
+
+      console.log("🔄 [FRONTEND] Recarregando feed após criação...");
       loadFeed(true);
     } catch (error: any) {
-      console.error(error);
+      console.error("❌ Erro ao criar post:", error);
+      console.error("❌ Mensagem de erro:", error.message);
       Alert.alert("Erro", error.message || "Erro ao criar post");
     } finally {
       setIsSubmitting(false);
@@ -385,10 +434,12 @@ export default function FeedScreen() {
                 style={styles.descriptionInput}
                 placeholder="Conte sobre sua doação..."
                 value={description}
-                onChangeText={setDescription}
+                onChangeText={handleDescriptionChange}
                 multiline
                 maxLength={500}
                 editable={!isSubmitting}
+                autoCorrect={true}
+                autoCapitalize="sentences"
               />
 
               <TouchableOpacity
@@ -497,6 +548,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 12,
+  },
+  avatarIcon: {
     marginRight: 12,
   },
   userInfo: {

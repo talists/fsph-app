@@ -34,6 +34,7 @@ apiService.interceptors.request.use(
       }
     }
 
+    // Para FormData, definir explicitamente o Content-Type
     if (config.data instanceof FormData) {
       config.headers["Content-Type"] = "multipart/form-data";
     }
@@ -47,18 +48,23 @@ apiService.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
     if (error.response) {
+      const errorData = error.response.data as any;
       console.error(
-        `[API] ❌ Erro ${error.response.status}: ${JSON.stringify(
-          error.response.data
-        )}`
+        `[API] ❌ Erro ${error.response.status}: ${JSON.stringify(errorData)}`
       );
+
+      // Extrai a mensagem de erro da resposta
+      const errorMsg = errorData?.msg || errorData?.message || errorData?.error;
+      if (errorMsg) {
+        return Promise.reject(new Error(errorMsg));
+      }
     } else if (error.request) {
       console.error(`[API] ❌ Falha de Conexão em: ${BASE_URL}`);
       return Promise.reject(
         new Error(
           "O Emulador não conseguiu conectar no Docker.\n\n" +
-            "1. Verifique se o Docker está rodando (docker ps).\n" +
-            "2. Tente acessar http://localhost:3334/api no navegador do PC."
+          "1. Verifique se o Docker está rodando (docker ps).\n" +
+          "2. Tente acessar http://localhost:3334/api no navegador do PC."
         )
       );
     }

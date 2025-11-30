@@ -28,8 +28,21 @@ export class UsuarioRepository {
   }
 
   static async update(id, data) {
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log("🎯 [REPOSITORY] Atualizando usuário...");
+    console.log("🆔 ID:", id);
+    console.log("📦 Data recebido:", JSON.stringify(data, null, 2));
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
     await repo.update(id, data);
-    return await repo.findOneBy({ id });
+    const updated = await repo.findOneBy({ id });
+
+    console.log("✅ [REPOSITORY] Usuário atualizado:");
+    console.log("📦 cidade:", updated.cidade);
+    console.log("📦 estado:", updated.estado);
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+    return updated;
   }
 
   static async delete(id) {

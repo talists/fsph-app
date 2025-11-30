@@ -40,6 +40,32 @@ export default function RegisterScreen() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
+  // Funções de máscara
+  const formatCPF = (text: string) => {
+    const numbers = text.replace(/\D/g, '');
+    if (numbers.length <= 3) return numbers;
+    if (numbers.length <= 6) return `${numbers.slice(0, 3)}.${numbers.slice(3)}`;
+    if (numbers.length <= 9) return `${numbers.slice(0, 3)}.${numbers.slice(3, 6)}.${numbers.slice(6)}`;
+    return `${numbers.slice(0, 3)}.${numbers.slice(3, 6)}.${numbers.slice(6, 9)}-${numbers.slice(9, 11)}`;
+  };
+
+  const formatDate = (text: string) => {
+    const numbers = text.replace(/\D/g, '');
+    if (numbers.length <= 2) return numbers;
+    if (numbers.length <= 4) return `${numbers.slice(0, 2)}/${numbers.slice(2)}`;
+    return `${numbers.slice(0, 2)}/${numbers.slice(2, 4)}/${numbers.slice(4, 8)}`;
+  };
+
+  const handleCPFChange = (text: string) => {
+    const formatted = formatCPF(text);
+    setCpf(formatted);
+  };
+
+  const handleDateChange = (text: string) => {
+    const formatted = formatDate(text);
+    setDataNascimento(formatted);
+  };
+
   // --- Função para escolher imagem da GALERIA ---
   const pickImageFromGallery = async () => {
     const permissionResult =
@@ -218,8 +244,9 @@ export default function RegisterScreen() {
               placeholder="000.000.000-00"
               placeholderTextColor="#9CA3AF"
               value={cpf}
-              onChangeText={setCpf}
+              onChangeText={handleCPFChange}
               keyboardType="numeric"
+              maxLength={14}
             />
           </View>
 
@@ -228,10 +255,10 @@ export default function RegisterScreen() {
             <Text style={styles.label}>Data de Nascimento</Text>
             <TextInput
               style={styles.input}
-              placeholder="Formato DD/MM/AAAA"
+              placeholder="DD/MM/AAAA"
               placeholderTextColor="#9CA3AF"
               value={dataNascimento}
-              onChangeText={setDataNascimento}
+              onChangeText={handleDateChange}
               keyboardType="numeric"
               maxLength={10}
             />

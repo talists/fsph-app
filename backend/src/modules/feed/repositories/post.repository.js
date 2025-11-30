@@ -1,4 +1,4 @@
-import  AppDataSource  from "../../../config/data-source.js";
+import AppDataSource from "../../../config/data-source.js";
 import { Post } from "../post.model.js";
 
 export class PostRepository {
@@ -8,7 +8,9 @@ export class PostRepository {
 
   async create(post) {
     const newPost = this.repo.create(post);
-    return await this.repo.save(newPost);
+    const saved = await this.repo.save(newPost);
+    // Buscar novamente com as relações para retornar o objeto completo
+    return await this.findById(saved.id);
   }
 
   async findAll(skip = 0, take = 20) {

@@ -12,7 +12,7 @@ export class FeedService {
     if (file) {
       url_imagem = await uploadToCloudflare(file);
     } else {
-      throw  new Error("A imagem é obrigatória");
+      throw new Error("A imagem é obrigatória");
     }
 
     const newPost = await postRepo.create({
@@ -21,12 +21,14 @@ export class FeedService {
       legenda: description,
     });
 
-    await redisClient.del("feed_posts_page_1_limit_20");
+    // Limpa todos os caches de feed
+    const keys = await redisClient.keys("feed_posts_*");
+    if (keys.length > 0) {
+      await Promise.all(keys.map(key => redisClient.del(key)));
+    }
 
     return newPost;
-  }
-
-  static async getFeedPosts(page = 1, limit = 20) {
+  } static async getFeedPosts(page = 1, limit = 20) {
     const cacheKey = `feed_posts_page_${page}_limit_${limit}`;
     const cached = await redisClient.get(cacheKey);
 
@@ -35,7 +37,6 @@ export class FeedService {
     const skip = (page - 1) * limit;
     const { posts, total } = await postRepo.findAll(skip, limit);
 
-    
     const postsInfoSeguras = posts.map(post => {
       // Cria um objeto de usuário seguro, apenas com os dados públicos
       const usuarioInfoPost = {
@@ -49,7 +50,7 @@ export class FeedService {
         url_imagem: post.url_imagem,
         legenda: post.legenda,
         criado_em: post.criado_em,
-        usuario: usuarioInfoPost 
+        usuario: usuarioInfoPost
       };
     });
 
@@ -62,9 +63,7 @@ export class FeedService {
 
     await redisClient.set(cacheKey, JSON.stringify(response), { EX: 60 });
     return response;
-  }
-
-  static async getPostsByUsuario(usuarioId) {
+  } static async getPostsByUsuario(usuarioId) {
     const cacheKey = `feed_posts_usuario_${usuarioId}`;
     const cached = await redisClient.get(cacheKey);
     if (cached) return JSON.parse(cached);
@@ -78,9 +77,13 @@ export class FeedService {
   static async updatePost(id, data) {
     const updated = await postRepo.update(id, data);
 
-    await redisClient.del("feed_posts_page_1_limit_20");
+    // Limpa todos os caches de feed
+    const keys = await redisClient.keys("feed_posts_*");
+    if (keys.length > 0) {
+      await Promise.all(keys.map(key => redisClient.del(key)));
+    }
 
-    await redisClient.del(`post_${id}`); 
+    await redisClient.del(`post_${id}`);
 
     return updated;
   }
@@ -88,7 +91,11 @@ export class FeedService {
   static async deletePost(id) {
     await postRepo.delete(id);
 
-    await redisClient.del("feed_posts_page_1_limit_20");
+    // Limpa todos os caches de feed
+    const keys = await redisClient.keys("feed_posts_*");
+    if (keys.length > 0) {
+      await Promise.all(keys.map(key => redisClient.del(key)));
+    }
 
     return { message: "Post deletado com sucesso" };
   }

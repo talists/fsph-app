@@ -28,6 +28,17 @@ export async function getAgendamentosByCPF(cpf: string) {
   return data;
 }
 
+// Alias para compatibilidade
+export const getAgendamentosDoador = getAgendamentosByCPF;
+
+// Cancelar agendamento
+export async function desmarcarAgendamento(protocolo: string) {
+  const { data } = await apiService.delete(
+    `/agendamentos/apiagendamento/agendamento/desmarcar/${protocolo}`
+  );
+  return data;
+}
+
 // --- Fluxo de Agendamento (Via Backend) ---
 export async function listarCidades(tipo: TipoAgendamento) {
   const { perm_individual, perm_medula, perm_campanha } = tipoToPerm(tipo);

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   ScrollView,
   StyleSheet,
@@ -14,10 +14,23 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useAuth } from "../contexts/AuthContext";
+import * as Notifications from "expo-notifications";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+// Configurar handler de notificações
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
 
 interface Notification {
   id: string;
-  type: "blood_alert" | "appointment_reminder" | "campaign" | "general";
+  type: string; // Aceita qualquer tipo de notificação
   title: string;
   message: string;
   timestamp: Date;
@@ -29,16 +42,56 @@ interface Notification {
   actionRoute?: string;
 }
 
-const NOTIFICATION_TYPES = {
+const NOTIFICATION_TYPES: Record<string, { icon: string; color: string; bgColor: string }> = {
+  blood_critical_general: {
+    icon: "water",
+    color: "#E73645",
+    bgColor: "#FEF2F2",
+  },
+  blood_critical_user: {
+    icon: "water",
+    color: "#DC2626",
+    bgColor: "#FEE2E2",
+  },
   blood_alert: {
     icon: "water",
     color: "#E73645",
     bgColor: "#FEF2F2",
   },
+  appointment_scheduled: {
+    icon: "calendar-outline",
+    color: "#059669",
+    bgColor: "#F0FDF4",
+  },
+  appointment_reminder_2days: {
+    icon: "calendar",
+    color: "#0891B2",
+    bgColor: "#ECFEFF",
+  },
+  appointment_reminder_1day: {
+    icon: "calendar",
+    color: "#0891B2",
+    bgColor: "#ECFEFF",
+  },
+  appointment_reminder_today: {
+    icon: "alarm",
+    color: "#DC2626",
+    bgColor: "#FEE2E2",
+  },
   appointment_reminder: {
     icon: "calendar",
     color: "#059669",
     bgColor: "#F0FDF4",
+  },
+  appointment_approaching: {
+    icon: "time",
+    color: "#F59E0B",
+    bgColor: "#FEF3C7",
+  },
+  campaign_new: {
+    icon: "megaphone",
+    color: "#7C3AED",
+    bgColor: "#F5F3FF",
   },
   campaign: {
     icon: "megaphone",
@@ -63,78 +116,102 @@ export default function NotificationsScreen() {
   >("all");
   const [unreadCount, setUnreadCount] = useState(0);
 
+  // Refs para listeners de notificações
+  const notificationListener = useRef<Notifications.Subscription>();
+  const responseListener = useRef<Notifications.Subscription>();
+
   useEffect(() => {
     loadNotifications();
+    setupNotificationListeners();
 
     // Auto-refresh every 30 seconds
     const interval = setInterval(() => {
       loadNotifications(true); // Silent refresh
     }, 30000);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      // Cleanup listeners
+      notificationListener.current?.remove();
+      responseListener.current?.remove();
+    };
   }, []);
+
+  // Configurar listeners para notificações do Expo
+  const setupNotificationListeners = () => {
+    // Listener para quando uma notificação é recebida enquanto o app está aberto
+    notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
+      console.log('📬 Notificação recebida:', notification);
+      // Adicionar a notificação à lista
+      const newNotification: Notification = {
+        id: notification.request.identifier,
+        type: 'general',
+        title: notification.request.content.title || 'Nova Notificação',
+        message: notification.request.content.body || '',
+        timestamp: new Date(),
+        read: false,
+        actionable: notification.request.content.data?.actionable as boolean,
+        actionText: notification.request.content.data?.actionText as string,
+        actionRoute: notification.request.content.data?.actionRoute as string,
+      };
+      setNotifications(prev => [newNotification, ...prev]);
+      setUnreadCount(prev => prev + 1);
+    });
+
+    // Listener para quando o usuário interage com a notificação
+    responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
+      console.log('👆 Usuário clicou na notificação:', response);
+      const notificationData = response.notification.request.content.data;
+
+      // Navegar para a tela apropriada
+      if (notificationData?.actionRoute) {
+        router.push(notificationData.actionRoute as any);
+      }
+    });
+  };
 
   const loadNotifications = async (silent = false) => {
     if (!silent) setLoading(true);
 
     try {
-      // Simular dados por enquanto - depois conectar com backend
-      const mockNotifications: Notification[] = [
-        {
-          id: "1",
-          type: "blood_alert",
-          title: "🩸 Sangue O- Crítico",
-          message:
-            "O estoque de sangue O- está em estado crítico. Sua doação pode salvar vidas!",
-          timestamp: new Date(Date.now() - 10 * 60 * 1000), // 10 min ago
-          read: false,
-          bloodType: "O-",
-          urgencyLevel: "critical",
-          actionable: true,
-          actionText: "Agendar Doação",
-          actionRoute: "/doar",
-        },
-        {
-          id: "2",
-          type: "appointment_reminder",
-          title: "📅 Lembrete de Agendamento",
-          message:
-            "Seu agendamento está marcado para amanhã às 14:00 no HEMOSE.",
-          timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
-          read: false,
-          actionable: true,
-          actionText: "Ver Detalhes",
-          actionRoute: "/appointments",
-        },
-        {
-          id: "3",
-          type: "campaign",
-          title: "🎯 Nova Campanha",
-          message:
-            'Campanha "Dezembro Vermelho" iniciada. Participe e ajude a salvar vidas!',
-          timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000), // 1 day ago
-          read: true,
-          actionable: true,
-          actionText: "Participar",
-          actionRoute: "/campaigns",
-        },
-        {
-          id: "4",
-          type: "appointment_reminder",
-          title: "⏰ Agendamento Hoje",
-          message: "Não se esqueça: seu agendamento é hoje às 14:00.",
-          timestamp: new Date(Date.now() - 30 * 60 * 1000), // 30 min ago
-          read: false,
-          urgencyLevel: "alert",
-          actionable: true,
-          actionText: "Como Chegar",
-          actionRoute: "/directions",
-        },
-      ];
+      // Buscar notificações agendadas do Expo Notifications
+      const scheduledNotifications = await Notifications.getAllScheduledNotificationsAsync();
 
-      setNotifications(mockNotifications);
-      const unread = mockNotifications.filter((n) => !n.read).length;
+      // Buscar notificações entregues (histórico)
+      const presentedNotifications = await Notifications.getPresentedNotificationsAsync();
+
+      // Carregar IDs de notificações lidas do AsyncStorage
+      const readNotificationsJson = await AsyncStorage.getItem('readNotifications');
+      const readNotificationIds = readNotificationsJson ? JSON.parse(readNotificationsJson) : [];
+
+      // Converter notificações do Expo para o formato do app
+      const realNotifications: Notification[] = presentedNotifications.map((notification) => {
+        const data = notification.request.content.data as any;
+        const notifId = notification.request.identifier;
+
+        return {
+          id: notifId,
+          type: data?.type || "general",
+          title: notification.request.content.title || "Nova Notificação",
+          message: notification.request.content.body || "",
+          timestamp: new Date(notification.date),
+          read: readNotificationIds.includes(notifId),
+          bloodType: data?.bloodType,
+          urgencyLevel: data?.urgencyLevel,
+          actionable: !!data?.actionRoute,
+          actionText: data?.actionText,
+          actionRoute: data?.actionRoute,
+        };
+      });
+
+      // Ordenar por timestamp (mais recentes primeiro)
+      realNotifications.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+
+      setNotifications(realNotifications);
+      const unread = realNotifications.filter((n) => !n.read).length;
       setUnreadCount(unread);
+
+      console.log(`✅ ${realNotifications.length} notificações carregadas (${unread} não lidas)`);
     } catch (error) {
       console.error("Error loading notifications:", error);
       Alert.alert("Erro", "Não foi possível carregar as notificações");
@@ -142,9 +219,7 @@ export default function NotificationsScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  };
-
-  const onRefresh = () => {
+  }; const onRefresh = () => {
     setRefreshing(true);
     loadNotifications();
   };
@@ -155,14 +230,30 @@ export default function NotificationsScreen() {
     );
     setUnreadCount((prev) => Math.max(0, prev - 1));
 
-    // TODO: Sync with backend
+    // Salvar no AsyncStorage
+    try {
+      const readNotificationsJson = await AsyncStorage.getItem('readNotifications');
+      const readNotificationIds = readNotificationsJson ? JSON.parse(readNotificationsJson) : [];
+      if (!readNotificationIds.includes(notificationId)) {
+        readNotificationIds.push(notificationId);
+        await AsyncStorage.setItem('readNotifications', JSON.stringify(readNotificationIds));
+      }
+    } catch (error) {
+      console.error('Erro ao salvar notificação lida:', error);
+    }
   };
 
   const markAllAsRead = async () => {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
     setUnreadCount(0);
 
-    // TODO: Sync with backend
+    // Salvar no AsyncStorage
+    try {
+      const allIds = notifications.map(n => n.id);
+      await AsyncStorage.setItem('readNotifications', JSON.stringify(allIds));
+    } catch (error) {
+      console.error('Erro ao salvar notificações lidas:', error);
+    }
   };
 
   const handleNotificationAction = (notification: Notification) => {
@@ -198,7 +289,7 @@ export default function NotificationsScreen() {
   const filteredNotifications = getFilteredNotifications();
 
   const renderNotification = (notification: Notification) => {
-    const typeConfig = NOTIFICATION_TYPES[notification.type];
+    const typeConfig = NOTIFICATION_TYPES[notification.type] || NOTIFICATION_TYPES.general;
     const isUrgent =
       notification.urgencyLevel === "critical" ||
       notification.urgencyLevel === "alert";
@@ -283,7 +374,7 @@ export default function NotificationsScreen() {
         <View style={styles.headerLeft}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => router.back()}
+            onPress={() => router.push("/(tabs)")}
           >
             <Ionicons name="arrow-back" size={24} color="#333" />
           </TouchableOpacity>

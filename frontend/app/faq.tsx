@@ -353,7 +353,9 @@ export default function FAQScreen() {
                                 <Text style={styles.noResultsTitle}>Nenhum resultado encontrado</Text>
                                 <Text style={styles.noResultsText}>
                                     Não encontramos perguntas sobre "{searchQuery}" na categoria {currentCategory?.title}.
-                                    {'\n\n'}Tente usar termos diferentes, verificar a outra categoria ou faça sua pergunta na seção abaixo.
+                                    <Text>{
+                                        '\n\n'
+                                    }</Text>Tente usar termos diferentes, verificar a outra categoria ou faça sua pergunta na seção abaixo.
                                 </Text>
                             </View>
                         ) : (

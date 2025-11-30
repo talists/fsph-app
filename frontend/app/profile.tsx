@@ -22,6 +22,7 @@ import * as ImagePicker from "expo-image-picker";
 import { StyleSheet } from "react-native";
 import { useAuth } from "../contexts/AuthContext";
 import { authService } from "../services/auth.service";
+import { apiService } from "../services/api";
 import DonorCardModal from "@/components/DonorCardModal";
 import DonationHistory from "@/components/DonationHistory";
 
@@ -36,14 +37,41 @@ Notifications.setNotificationHandler({
   }),
 });
 
+// Funções de máscara
+const formatCPF = (text: string): string => {
+  const cleaned = text.replace(/\D/g, "");
+  const limited = cleaned.substring(0, 11);
+  const formatted = limited.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+  return formatted;
+};
+
+const formatPhone = (text: string): string => {
+  const cleaned = text.replace(/\D/g, "");
+  const limited = cleaned.substring(0, 11);
+
+  if (limited.length <= 10) {
+    // Formato: (DD) DDDD-DDDD
+    return limited.replace(/(\d{2})(\d{4})(\d{0,4})/, "($1) $2-$3");
+  } else {
+    // Formato: (DD) D-DDDD-DDDD
+    return limited.replace(/(\d{2})(\d{1})(\d{4})(\d{0,4})/, "($1) $2-$3-$4");
+  }
+};
+
+const formatDate = (text: string): string => {
+  const cleaned = text.replace(/\D/g, "");
+  const limited = cleaned.substring(0, 8);
+  return limited.replace(/(\d{2})(\d{2})(\d{0,4})/, "$1/$2/$3");
+};
+
 export type Achievement = {
   type:
-    | "first_blood_donation"
-    | "first_post"
-    | "first_campaign"
-    | "bone_marrow_donor"
-    | "milestone_donations"
-    | "emergency_donor";
+  | "first_blood_donation"
+  | "first_post"
+  | "first_campaign"
+  | "bone_marrow_donor"
+  | "milestone_donations"
+  | "emergency_donor";
   title: string;
   date: string;
 };
@@ -67,7 +95,8 @@ export interface UserProfile {
   rua?: string;
   numero?: string;
   bairro?: string;
-  cidadeUf?: string;
+  cidade?: string;
+  estado?: string;
 }
 
 export default function ProfileScreen() {
@@ -145,18 +174,16 @@ export default function ProfileScreen() {
         profileImage: userData.url_foto_perfil,
 
         // Mapeia endereço (se o backend enviar esses campos, senão deixa vazio)
-        rua: userData.cidade ? "Endereço cadastrado" : "",
-        numero: "",
-        bairro: "",
-        cidadeUf:
-          userData.cidade && userData.estado
-            ? `${userData.cidade}-${userData.estado}`
-            : "",
+        rua: userData.rua || "",
+        numero: userData.numero || "",
+        bairro: userData.bairro || "",
+        cidade: userData.cidade || "",
+        estado: userData.estado || "",
 
         // Campos que talvez ainda não existam no backend
         emergencyContactName: "",
         emergencyContactPhone: "",
-        achievements: [], // Você pode implementar lógica de conquistas depois
+        achievements: generateAchievements(userData.donationCount || 0, userData.lastDonation),
       };
 
       setProfile(realProfile);
@@ -167,6 +194,45 @@ export default function ProfileScreen() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Função para gerar conquistas baseadas no perfil do usuário
+  const generateAchievements = (donationCount: number, lastDonation?: string): Achievement[] => {
+    const achievements: Achievement[] = [];
+
+    if (donationCount >= 1) {
+      achievements.push({
+        type: "first_blood_donation",
+        title: "Primeira Doação",
+        date: lastDonation || new Date().toISOString(),
+      });
+    }
+
+    if (donationCount >= 5) {
+      achievements.push({
+        type: "milestone_donations",
+        title: "5 Doações Realizadas",
+        date: new Date().toISOString(),
+      });
+    }
+
+    if (donationCount >= 10) {
+      achievements.push({
+        type: "milestone_donations",
+        title: "10 Doações - Herói do Sangue",
+        date: new Date().toISOString(),
+      });
+    }
+
+    if (donationCount >= 20) {
+      achievements.push({
+        type: "milestone_donations",
+        title: "20 Doações - Lenda Viva",
+        date: new Date().toISOString(),
+      });
+    }
+
+    return achievements;
   };
 
   const pickImage = async () => {
@@ -418,15 +484,65 @@ export default function ProfileScreen() {
     setIsEditing(!isEditing);
   };
 
-  const handleSaveChanges = () => {
-    if (editedProfile) {
+  const handleSaveChanges = async () => {
+    if (!editedProfile || !profile) return;
+
+    try {
+      setLoading(true);
+
+      // Prepara os dados para enviar ao backend (converte camelCase para snake_case)
+      // Remove campos vazios/nulos para evitar problemas de validação
+      const updateData: any = {};
+
+      if (editedProfile.name !== profile.name) updateData.nome = editedProfile.name;
+      if (editedProfile.email !== profile.email) updateData.email = editedProfile.email;
+      if (editedProfile.phone !== profile.phone) updateData.numero_telefone = editedProfile.phone;
+      if (editedProfile.bloodType !== profile.bloodType) updateData.tipo_sanguineo = editedProfile.bloodType;
+      if (editedProfile.gender !== profile.gender) updateData.sexo = editedProfile.gender;
+
+      // Adiciona campos opcionais apenas se tiverem valor
+      if (editedProfile.cpf) updateData.cpf = editedProfile.cpf;
+      if (editedProfile.rg) updateData.rg = editedProfile.rg;
+      if (editedProfile.birthDate) updateData.data_nascimento = editedProfile.birthDate;
+
+      // SEMPRE envia cidade e estado, mesmo que vazios, para permitir atualização
+      updateData.cidade = editedProfile.cidade || "";
+      updateData.estado = editedProfile.estado || "";
+
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('📤 [FRONTEND] Enviando dados para atualização');
+      console.log('🆔 User ID:', profile.id);
+      console.log('📦 editedProfile.cidade:', editedProfile.cidade);
+      console.log('📦 editedProfile.estado:', editedProfile.estado);
+      console.log('📤 updateData completo:', JSON.stringify(updateData, null, 2));
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+      // Usa a rota correta do backend: PATCH /usuarios/:id
+      const response = await apiService.patch(`/usuarios/${profile.id}`, updateData);
+
+      console.log('✅ Resposta do servidor:', response.data);
+
+      // Atualiza o estado local
       setProfile(editedProfile);
       setIsEditing(false);
       Alert.alert("Sucesso", "Dados atualizados com sucesso!");
-    }
-  };
 
-  const handleCancelEdit = () => {
+      // Recarrega o perfil do backend
+      await loadProfile();
+    } catch (error: any) {
+      console.error('❌ Erro ao salvar perfil:', error);
+      console.error('❌ Detalhes do erro:', error.response?.data);
+
+      const errorMessage = error.response?.data?.msg ||
+        error.response?.data?.message ||
+        error.response?.data?.errors?.[0]?.message ||
+        'Não foi possível atualizar os dados. Tente novamente.';
+
+      Alert.alert("Erro", errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  }; const handleCancelEdit = () => {
     setIsEditing(false);
     setEditedProfile(null);
   };
@@ -643,6 +759,25 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           </View>
 
+          {/* Meus Agendamentos - Logo após cartão */}
+          <TouchableOpacity
+            style={styles.meusAgendamentosCard}
+            onPress={() => router.push("/meus-agendamentos")}
+          >
+            <View style={styles.meusAgendamentosContent}>
+              <View style={styles.meusAgendamentosIconContainer}>
+                <Ionicons name="calendar" size={28} color="#DC2626" />
+              </View>
+              <View style={styles.meusAgendamentosInfo}>
+                <Text style={styles.meusAgendamentosTitle}>Meus Agendamentos</Text>
+                <Text style={styles.meusAgendamentosSubtitle}>
+                  Visualize e gerencie suas doações agendadas
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={24} color="#9CA3AF" />
+            </View>
+          </TouchableOpacity>
+
           {/* Achievements Section */}
           <View style={styles.achievementsCard}>
             <Text style={styles.sectionTitle}>Últimas Conquistas</Text>
@@ -764,11 +899,11 @@ export default function ProfileScreen() {
             <Ionicons name="log-out-outline" size={20} color="#E73645" />
             <Text style={styles.logoutText}>Sair da Conta</Text>
           </TouchableOpacity>
-        </ScrollView>
-      </View>
+        </ScrollView >
+      </View >
 
       {/* Meus Dados Modal */}
-      <Modal
+      < Modal
         visible={myDataModalVisible}
         animationType="slide"
         presentationStyle="pageSheet"
@@ -853,8 +988,11 @@ export default function ProfileScreen() {
                   <TextInput
                     style={styles.editInput}
                     value={editedProfile?.phone || ""}
-                    onChangeText={(text) => updateField("phone", text)}
-                    placeholder="(79) 99999-9999"
+                    onChangeText={(text) => {
+                      const formatted = formatPhone(text);
+                      updateField("phone", formatted);
+                    }}
+                    placeholder="(79) 9-9999-9999"
                     keyboardType="phone-pad"
                   />
                 ) : (
@@ -868,7 +1006,10 @@ export default function ProfileScreen() {
                   <TextInput
                     style={styles.editInput}
                     value={editedProfile?.cpf || ""}
-                    onChangeText={(text) => updateField("cpf", text)}
+                    onChangeText={(text) => {
+                      const formatted = formatCPF(text);
+                      updateField("cpf", formatted);
+                    }}
                     placeholder="123.456.789-00"
                     keyboardType="numeric"
                   />
@@ -900,25 +1041,26 @@ export default function ProfileScreen() {
                     style={styles.editInput}
                     value={
                       editedProfile?.birthDate
-                        ? new Date(editedProfile.birthDate).toLocaleDateString(
-                            "pt-BR"
-                          )
+                        ? formatDate(
+                          new Date(editedProfile.birthDate)
+                            .toLocaleDateString("pt-BR")
+                            .replace(/\//g, "")
+                        )
                         : ""
                     }
                     onChangeText={(text) => {
+                      const formatted = formatDate(text);
                       // Converter formato DD/MM/YYYY para YYYY-MM-DD para armazenar
-                      const parts = text.split("/");
-                      if (parts.length === 3) {
+                      const parts = formatted.split("/");
+                      if (parts.length === 3 && parts[2].length === 4) {
                         const isoDate = `${parts[2]}-${parts[1].padStart(
                           2,
                           "0"
                         )}-${parts[0].padStart(2, "0")}`;
                         updateField("birthDate", isoDate);
-                      } else {
-                        updateField("birthDate", text);
                       }
                     }}
-                    placeholder="15/05/1990"
+                    placeholder="DD/MM/AAAA"
                     keyboardType="numeric"
                   />
                 ) : (
@@ -950,6 +1092,56 @@ export default function ProfileScreen() {
                     ]}
                   >
                     {profile.bloodType}
+                  </Text>
+                )}
+              </View>
+
+              <View style={styles.dataItem}>
+                <Text style={styles.dataLabel}>Sexo</Text>
+                {isEditing ? (
+                  <View style={styles.genderSelector}>
+                    <TouchableOpacity
+                      style={[
+                        styles.genderOption,
+                        editedProfile?.gender === "M" && styles.genderOptionSelected
+                      ]}
+                      onPress={() => updateField("gender", "M")}
+                    >
+                      <Ionicons
+                        name="male"
+                        size={20}
+                        color={editedProfile?.gender === "M" ? "#fff" : "#666"}
+                      />
+                      <Text style={[
+                        styles.genderOptionText,
+                        editedProfile?.gender === "M" && styles.genderOptionTextSelected
+                      ]}>
+                        Masculino
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.genderOption,
+                        editedProfile?.gender === "F" && styles.genderOptionSelected
+                      ]}
+                      onPress={() => updateField("gender", "F")}
+                    >
+                      <Ionicons
+                        name="female"
+                        size={20}
+                        color={editedProfile?.gender === "F" ? "#fff" : "#666"}
+                      />
+                      <Text style={[
+                        styles.genderOptionText,
+                        editedProfile?.gender === "F" && styles.genderOptionTextSelected
+                      ]}>
+                        Feminino
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <Text style={styles.dataValue}>
+                    {profile.gender === "M" ? "Masculino" : profile.gender === "F" ? "Feminino" : "Não informado"}
                   </Text>
                 )}
               </View>
@@ -1049,27 +1241,45 @@ export default function ProfileScreen() {
               </View>
 
               <View style={styles.dataItem}>
-                <Text style={styles.dataLabel}>Cidade-UF</Text>
+                <Text style={styles.dataLabel}>Cidade</Text>
                 {isEditing ? (
                   <TextInput
                     style={styles.editInput}
-                    value={editedProfile?.cidadeUf || ""}
-                    onChangeText={(text) => updateField("cidadeUf", text)}
-                    placeholder="Cidade-UF (ex: São Paulo-SP)"
+                    value={editedProfile?.cidade || ""}
+                    onChangeText={(text) => updateField("cidade", text)}
+                    placeholder="Cidade"
                   />
                 ) : (
                   <Text style={styles.dataValue}>
-                    {profile.cidadeUf || "Não informado"}
+                    {profile.cidade || "Não informado"}
+                  </Text>
+                )}
+              </View>
+
+              <View style={styles.dataItem}>
+                <Text style={styles.dataLabel}>Estado</Text>
+                {isEditing ? (
+                  <TextInput
+                    style={styles.editInput}
+                    value={editedProfile?.estado || ""}
+                    onChangeText={(text) => updateField("estado", text)}
+                    placeholder="UF (ex: SE)"
+                    maxLength={2}
+                    autoCapitalize="characters"
+                  />
+                ) : (
+                  <Text style={styles.dataValue}>
+                    {profile.estado || "Não informado"}
                   </Text>
                 )}
               </View>
             </View>
           </ScrollView>
         </SafeAreaView>
-      </Modal>
+      </Modal >
 
       {/* Configurações Modal */}
-      <Modal
+      < Modal
         visible={settingsModalVisible}
         animationType="slide"
         presentationStyle="pageSheet"
@@ -1370,14 +1580,15 @@ export default function ProfileScreen() {
             </View>
           </ScrollView>
         </SafeAreaView>
-      </Modal>
+      </Modal >
 
       {/* Blood Type Picker Modal */}
-      <Modal
+      < Modal
         visible={bloodTypePickerVisible}
         transparent={true}
         animationType="slide"
-        onRequestClose={() => setBloodTypePickerVisible(false)}
+        onRequestClose={() => setBloodTypePickerVisible(false)
+        }
       >
         <View style={styles.pickerModalOverlay}>
           <View style={styles.pickerModalContainer}>
@@ -1400,7 +1611,7 @@ export default function ProfileScreen() {
                   style={[
                     styles.bloodTypeOption,
                     editedProfile?.bloodType === type &&
-                      styles.selectedBloodTypeOption,
+                    styles.selectedBloodTypeOption,
                   ]}
                   onPress={() => {
                     updateField("bloodType", type);
@@ -1430,29 +1641,21 @@ export default function ProfileScreen() {
             </ScrollView>
           </View>
         </View>
-      </Modal>
+      </Modal >
 
       {/* Fullscreen Card Modal */}
-      <DonorCardModal
+      < DonorCardModal
         visible={fullscreenCardVisible}
         onClose={() => setFullscreenCardVisible(false)}
         id={profile?.id?.toString() || ""}
         name={profile?.name || "Nome não informado"}
         bloodType={profile?.bloodType || "Não informado"}
         profileImage={profile?.profileImage}
-        lastDonation={
-          profile?.lastDonation
-            ? new Date(profile.lastDonation).toLocaleDateString("pt-BR")
-            : "Ainda não doou"
-        }
+        lastDonation={profile?.lastDonation || undefined}
         donationCount={profile?.donationCount ?? 0}
         cpf={profile?.cpf || ""}
         rg={profile?.rg || "Não informado"}
-        birthDate={
-          profile?.birthDate
-            ? new Date(profile.birthDate).toLocaleDateString("pt-BR")
-            : "Não informada"
-        }
+        birthDate={profile?.birthDate || undefined}
         gender={profile?.gender || "M"}
       />
 
@@ -1515,13 +1718,13 @@ export default function ProfileScreen() {
                   <Text style={styles.boldText}>
                     {profile?.lastDonation
                       ? new Date(profile.lastDonation).toLocaleDateString(
-                          "pt-BR",
-                          {
-                            day: "2-digit",
-                            month: "long",
-                            year: "numeric",
-                          }
-                        )
+                        "pt-BR",
+                        {
+                          day: "2-digit",
+                          month: "long",
+                          year: "numeric",
+                        }
+                      )
                       : "Data não disponível"}
                   </Text>
                   , para doação de sangue.
@@ -1631,7 +1834,7 @@ export default function ProfileScreen() {
           </ScrollView>
         </SafeAreaView>
       </Modal>
-    </SafeAreaView>
+    </SafeAreaView >
   );
 }
 
@@ -1754,6 +1957,46 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#F59E0B",
     fontWeight: "500",
+  },
+  meusAgendamentosCard: {
+    backgroundColor: "#FFF",
+    margin: 16,
+    marginTop: 8,
+    padding: 16,
+    borderRadius: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    borderLeftWidth: 4,
+    borderLeftColor: "#DC2626",
+  },
+  meusAgendamentosContent: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  meusAgendamentosIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "#FEE2E2",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  meusAgendamentosInfo: {
+    flex: 1,
+  },
+  meusAgendamentosTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#111827",
+    marginBottom: 4,
+  },
+  meusAgendamentosSubtitle: {
+    fontSize: 13,
+    color: "#6B7280",
   },
   achievementsCard: {
     backgroundColor: "#FFF",
@@ -2061,6 +2304,38 @@ const styles = StyleSheet.create({
   multilineInput: {
     height: 80,
     textAlignVertical: "top",
+  },
+
+  // Gender Selector Styles
+  genderSelector: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 4,
+  },
+  genderOption: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    borderRadius: 8,
+    backgroundColor: "#FFF",
+  },
+  genderOptionSelected: {
+    backgroundColor: "#E73645",
+    borderColor: "#E73645",
+  },
+  genderOptionText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#666",
+  },
+  genderOptionTextSelected: {
+    color: "#FFF",
   },
 
   // Blood Type Selector Styles

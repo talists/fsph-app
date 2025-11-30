@@ -12,6 +12,8 @@ import { useColorScheme } from "../hooks/useColorScheme";
 import { AuthProvider, useAuth } from "../contexts/AuthContext";
 import React, { useEffect, useState, createContext, useContext } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { notificationService } from "../services/notificacao.service";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -31,6 +33,29 @@ function RootLayoutNav() {
   const { isAnimationFinished } = useSplash();
   const router = useRouter();
   const colorScheme = useColorScheme();
+
+  // Inicializa o serviço de notificações - TEMPORARIAMENTE DESABILITADO
+  // useEffect(() => {
+  //   const initNotifications = async () => {
+  //     try {
+  //       await notificationService.initialize();
+  //       console.log("✅ Serviço de notificações inicializado");
+
+  //       // Envia uma notificação de campanha mockada aleatoriamente (1x por dia)
+  //       const lastCampaignNotif = await AsyncStorage.getItem("lastCampaignNotif");
+  //       const today = new Date().toDateString();
+
+  //       if (lastCampaignNotif !== today && Math.random() > 0.7) {
+  //         await notificationService.sendMockCampaignNotifications();
+  //         await AsyncStorage.setItem("lastCampaignNotif", today);
+  //       }
+  //     } catch (error) {
+  //       console.error("Erro ao inicializar notificações:", error);
+  //     }
+  //   };
+
+  //   initNotifications();
+  // }, []);
 
   useEffect(() => {
     console.log(
@@ -54,11 +79,19 @@ function RootLayoutNav() {
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
       <View style={{ flex: 1 }}>
         <StatusBar style="auto" />
-        <Stack>
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="index" options={{ headerShown: false }} />
           <Stack.Screen name="splash1" options={{ headerShown: false }} />
           <Stack.Screen name="splash2" options={{ headerShown: false }} />
           <Stack.Screen name="login" options={{ headerShown: false }} />
           <Stack.Screen name="register" options={{ headerShown: false }} />
+          <Stack.Screen
+            name="meus-agendamentos"
+            options={{
+              headerShown: false,
+              presentation: "card",
+            }}
+          />
           <Stack.Screen
             name="profile"
             options={{
@@ -78,6 +111,10 @@ function RootLayoutNav() {
               headerTintColor: "white",
               headerTitleStyle: { fontWeight: "700" },
             }}
+          />
+          <Stack.Screen
+            name="notifications"
+            options={{ headerShown: false }}
           />
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen

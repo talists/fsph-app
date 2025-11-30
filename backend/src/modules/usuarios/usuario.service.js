@@ -102,6 +102,13 @@ export class UsuarioService {
   }
 
   static async update(id, data, file) {
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log("🎯 [SERVICE] Atualizando usuário...");
+    console.log("🆔 ID:", id);
+    console.log("📦 Data recebido:", JSON.stringify(data, null, 2));
+    console.log("📁 File:", file ? file.filename : "Sem arquivo");
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
     let urlFotoAntiga = null;
 
     if (file) {
@@ -119,6 +126,8 @@ export class UsuarioService {
       data.senha = await bcrypt.hash(data.senha, salt);
     }
 
+    console.log("📝 [SERVICE] Dados finais antes do repository:", JSON.stringify(data, null, 2));
+
     const usuarioAtualizado = await UsuarioRepository.update(id, data);
     delete usuarioAtualizado.senha;
 
@@ -131,6 +140,8 @@ export class UsuarioService {
     await redisClient.set(`usuario_${id}`, JSON.stringify(usuarioAtualizado), {
       EX: 3600,
     });
+
+    console.log("✅ [SERVICE] Atualização concluída com sucesso!");
 
     return usuarioAtualizado;
   }

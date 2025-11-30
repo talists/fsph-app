@@ -75,11 +75,7 @@ export const AgendamentoController = {
 
   marcarAgendamento: async (req, res) => {
     try {
-      const aprovado = await PreTriagemService.verificarPreTriagem(req.user.id);
-      if (!aprovado)
-        return res
-          .status(403)
-          .json({ msg: "Usuário não aprovado na pré-triagem" });
+      // Verificação de pré-triagem é opcional, não bloqueia o agendamento
       const payload = { ...req.body, usuario: { id: req.user.id } };
       const result = await AgendamentoService.marcarAgendamento(
         payload,
@@ -148,6 +144,15 @@ export const AgendamentoController = {
       );
     } catch (err) {
       res.status(500).json({ msg: err.message });
+    }
+  },
+
+  desmarcarAgendamentoFSPH: async (req, res) => {
+    try {
+      const result = await AgendamentoService.desmarcarAgendamentoFSPH(req.params.protocolo);
+      res.json(result);
+    } catch (err) {
+      res.status(400).json({ msg: err.message });
     }
   },
 };

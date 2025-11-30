@@ -21,6 +21,7 @@ import { Calendar, LocaleConfig } from "react-native-calendars";
 import { useAuth } from "@/contexts/AuthContext";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as HEMOSE from "@/services/agendamento.service";
+import { notificationService } from "@/services/notificacao.service";
 
 // Lista de DDDs do Brasil
 const DDD_LIST = [
@@ -175,6 +176,13 @@ export default function DoarScreen() {
   const [confirmationPayload, setConfirmationPayload] = useState<any>(null);
   const [sendingNotifications, setSendingNotifications] = useState(false);
   const [systemUsed, setSystemUsed] = useState<"hemose" | "local" | null>(null);
+  const [notificationChannels, setNotificationChannels] = useState({
+    email: true, // Obrigatório
+    sms: true,   // Obrigatório
+    whatsapp: false,
+    push: false,
+  });
+  const [showNotificationModal, setShowNotificationModal] = useState(false);
   const [campaignForm, setCampaignForm] = useState<any>({
     organizador_cpf: "",
     organizador_nome: "",
@@ -265,7 +273,7 @@ export default function DoarScreen() {
           useNativeDriver: true,
         }),
       ]).start();
-    } catch (e) {}
+    } catch (e) { }
     handleNext();
   };
   LocaleConfig.defaultLocale = "pt-br";
@@ -274,6 +282,7 @@ export default function DoarScreen() {
   const [locais, setLocais] = useState<any[]>([]);
   const [blocosDates, setBlocosDates] = useState<any[]>([]);
   const [blocosByDate, setBlocosByDate] = useState<any[]>([]);
+  const [selectedBlocoHora, setSelectedBlocoHora] = useState<string | null>(null);
   const [selectedCidade, setSelectedCidade] = useState<any>(null);
   const [selectedLocal, setSelectedLocal] = useState<any>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -286,6 +295,24 @@ export default function DoarScreen() {
   );
   const [localDetailsVisible, setLocalDetailsVisible] = useState(false);
   const [localDetails, setLocalDetails] = useState<any | null>(null);
+
+  // Função para agrupar horários por blocos de hora
+  const agruparHorariosPorBloco = (horarios: any[]) => {
+    const grupos: { [hora: string]: any[] } = {};
+
+    horarios.forEach((horario) => {
+      // Extrai a hora do horário (ex: "07:00 - 07:30" => "07:00")
+      const horaStr = horario.hora || horario.min_hora || "";
+      const horaInicio = horaStr.split(":")[0] + ":00";
+
+      if (!grupos[horaInicio]) {
+        grupos[horaInicio] = [];
+      }
+      grupos[horaInicio].push(horario);
+    });
+
+    return grupos;
+  };
 
   const scalesRef = useRef<{ [k: string]: Animated.Value }>({
     D: new Animated.Value(1),
@@ -420,17 +447,17 @@ export default function DoarScreen() {
       payload.tipo === "D"
         ? "Doação de Sangue"
         : payload.tipo === "M"
-        ? "Cadastro de Medula Óssea"
-        : "Campanha";
+          ? "Cadastro de Medula Óssea"
+          : "Campanha";
     const name = payload.doador_nome || payload.organizador_nome;
     const local = selectedLocal?.nome || "Local não especificado";
     const date = selectedDate
       ? new Date(selectedDate).toLocaleDateString("pt-BR", {
-          weekday: "long",
-          day: "numeric",
-          month: "long",
-          year: "numeric",
-        })
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      })
       : "";
     const time = selectedHorario?.hora || "";
     return `✅ Agendamento Confirmado!\n\nTipo: ${type}\nNome: ${name}\nLocal: ${local}\nData: ${date}\nHorário: ${time}\n\nObrigado por salvar vidas! ❤️`;
@@ -439,6 +466,37 @@ export default function DoarScreen() {
   const sendNotifications = async (payload: any) => {
     setSendingNotifications(true);
     try {
+      // 🔔 NOTIFICAÇÕES AUTOMÁTICAS DO SISTEMA - TEMPORARIAMENTE DESABILITADO
+      // if (payload.tipo && selectedHorario && selectedLocal) {
+      //   try {
+      //     // Criar data do agendamento
+      //     const [year, month, day] = selectedDate!.split("-").map(Number);
+      //     const [hour, minute] = selectedHorario.hora.split(":").map(Number);
+      //     const appointmentDate = new Date(year, month - 1, day, hour, minute);
+
+      //     const localName = selectedLocal.nome || "HEMOSE";
+      //     const protocol = payload.protocolo || `AG-${Date.now()}`;
+
+      //     // Envia notificação de confirmação imediatamente
+      //     await notificationService.sendAppointmentConfirmation(
+      //       protocol,
+      //       appointmentDate,
+      //       localName
+      //     );
+
+      //     // Agenda lembretes (2 dias antes, 1 dia antes, 2h antes)
+      //     await notificationService.scheduleAppointmentReminder(
+      //       protocol,
+      //       appointmentDate,
+      //       localName
+      //     );
+
+      //     console.log("✅ Notificações de agendamento configuradas com sucesso!");
+      //   } catch (notifError) {
+      //     console.error("Erro ao configurar notificações:", notifError);
+      //   }
+      // }
+
       if (user && token) {
         // Aqui poderia enviar notificação local ou chamar backend se necessário
         // await apiService.sendNotification(...)
@@ -459,38 +517,7 @@ export default function DoarScreen() {
           android: `sms:+55${phone}?body=${encodeURIComponent(message)}`,
         });
 
-        Alert.alert(
-          "📱 Confirmar Envios",
-          "Deseja receber confirmação por WhatsApp e SMS?",
-          [
-            { text: "Não", style: "cancel" },
-            {
-              text: "WhatsApp",
-              onPress: () =>
-                Linking.openURL(whatsappUrl).catch(() =>
-                  Alert.alert("WhatsApp não encontrado")
-                ),
-            },
-            {
-              text: "SMS",
-              onPress: () =>
-                Linking.openURL(smsUrl!).catch(() =>
-                  Alert.alert("SMS não disponível")
-                ),
-            },
-            {
-              text: "Ambos",
-              onPress: async () => {
-                try {
-                  await Linking.openURL(whatsappUrl);
-                  setTimeout(() => Linking.openURL(smsUrl!), 1000);
-                } catch {
-                  Alert.alert("Erro ao abrir aplicativos de mensagem");
-                }
-              },
-            },
-          ]
-        );
+        // Alerts removidos - usar apenas modal de notificações
       }
 
       const email = payload.doador_email || payload.organizador_email;
@@ -498,22 +525,7 @@ export default function DoarScreen() {
         const emailUrl = `mailto:${email}?subject=${encodeURIComponent(
           "Confirmação de Agendamento - HEMOSE"
         )}&body=${encodeURIComponent(message)}`;
-        setTimeout(() => {
-          Alert.alert(
-            "📧 Enviar por Email?",
-            "Deseja enviar confirmação por email?",
-            [
-              { text: "Não", style: "cancel" },
-              {
-                text: "Sim",
-                onPress: () =>
-                  Linking.openURL(emailUrl).catch(() =>
-                    Alert.alert("Email não configurado")
-                  ),
-              },
-            ]
-          );
-        }, 2000);
+        // Alert de email removido - usar apenas modal de notificações
       }
     } catch (err) {
       console.error("Error sending notifications:", err);
@@ -524,6 +536,11 @@ export default function DoarScreen() {
 
   const startConfirmationFlow = (payload: any) => {
     setConfirmationPayload(payload);
+    setShowNotificationModal(true);
+  };
+
+  const confirmNotificationChannels = () => {
+    setShowNotificationModal(false);
     setConfirmationVisible(true);
     confirmAnim.setValue(0);
     Animated.timing(confirmAnim, {
@@ -531,7 +548,7 @@ export default function DoarScreen() {
       duration: 2000,
       useNativeDriver: false,
     }).start(() => {
-      sendNotifications(payload);
+      sendNotifications(confirmationPayload);
     });
   };
 
@@ -623,27 +640,32 @@ export default function DoarScreen() {
         // CORRIGIDO: Chama o serviço HEMOSE para listar cidades (padrão 'D')
         const res = await HEMOSE.listarCidades("D");
         setCidades(res || []);
-      } catch (e) {}
+      } catch (e) { }
     })();
   }, []);
 
   const handleBuscar = async () => {
-    if (!cpf || cpf.trim().length < 3) {
-      Alert.alert("Digite um CPF válido");
+    const cleanCpf = cpf.replace(/\D/g, "");
+    if (!cleanCpf || cleanCpf.length !== 11) {
+      Alert.alert("Atenção", "Digite um CPF válido com 11 dígitos");
       return;
     }
     setLoading(true);
     try {
-      // CORRIGIDO: Usa as funções refatoradas do HEMOSE Service
-      const cleanCpf = cpf.replace(/\D/g, "");
       const info = await HEMOSE.getDoadorInfoByCPF(cleanCpf);
       const ags = await HEMOSE.getAgendamentosByCPF(cleanCpf);
 
       setDoador(info);
-      setAgendamentos(ags);
+      setAgendamentos(ags || []);
+
+      if (!ags || ags.length === 0) {
+        Alert.alert("Consulta realizada", "Nenhum agendamento ativo encontrado para este CPF.");
+      }
     } catch (error: any) {
       console.warn("Erro ao buscar doador", error);
-      Alert.alert("Erro", error.message || "Não foi possível buscar dados");
+      Alert.alert("Erro", error.message || "Não foi possível buscar dados. Verifique se o CPF está correto.");
+      setDoador(null);
+      setAgendamentos(null);
     } finally {
       setLoading(false);
     }
@@ -866,6 +888,7 @@ export default function DoarScreen() {
         doador_sexo: formData.doador_sexo,
         tipo: agendamentoType as HEMOSE.TipoAgendamento,
         id_bloco_doacao: formData.id_bloco_doacao,
+        data_agendamento: selectedDate ? new Date(selectedDate).toISOString() : new Date().toISOString(),
         pre_primeira_vez: preTriagem.primeiraVez,
         pre_pesa_mais_50: preTriagem.pesaMais50,
         pre_tatuagem_piercing: preTriagem.tatuagemRecente,
@@ -893,7 +916,19 @@ export default function DoarScreen() {
       setStep(0);
       startConfirmationFlow(payload);
     } catch (e: any) {
-      Alert.alert("Erro", e.message || "Falha ao marcar");
+      // Extrai a mensagem de erro da API HEMOSE
+      const errorMsg = e.message || "Falha ao marcar agendamento";
+
+      // Se for erro de intervalo entre doações, mostra mensagem mais amigável
+      if (errorMsg.includes("já marcou uma doação") || errorMsg.includes("próxima data")) {
+        Alert.alert(
+          "Intervalo entre doações",
+          errorMsg,
+          [{ text: "Entendi", style: "default" }]
+        );
+      } else {
+        Alert.alert("Erro ao agendar", errorMsg);
+      }
     }
   };
 
@@ -1027,11 +1062,15 @@ export default function DoarScreen() {
         <View style={styles.searchColumn}>
           <View style={styles.searchRow}>
             <TextInput
-              placeholder="CPF do doador"
-              value={cpf}
-              onChangeText={setCpf}
+              placeholder="CPF do doador (000.000.000-00)"
+              value={formatCPF(cpf)}
+              onChangeText={(text) => {
+                const cleaned = text.replace(/\D/g, "");
+                setCpf(cleaned);
+              }}
               style={[styles.input, { marginBottom: 0, flex: 1 }]}
               keyboardType="numeric"
+              maxLength={14}
             />
             <Pressable style={[styles.searchButton]} onPress={handleBuscar}>
               {loading ? (
@@ -1073,6 +1112,43 @@ export default function DoarScreen() {
             <Text style={styles.infoButtonText}>Informações para doar</Text>
           </Pressable>
         </View>
+
+        {/* Resultados da Busca por CPF */}
+        {agendamentos && agendamentos.length > 0 && (
+          <View style={styles.searchResults}>
+            <Text style={styles.searchResultsTitle}>
+              Agendamentos encontrados
+            </Text>
+            {agendamentos.map((ag: any, index: number) => (
+              <View key={index} style={styles.agendamentoCard}>
+                <View style={styles.agendamentoHeader}>
+                  <Ionicons name="calendar" size={20} color="#DC2626" />
+                  <Text style={styles.agendamentoTipo}>
+                    {ag.tipo === "D" ? "Doação de Sangue" :
+                      ag.tipo === "M" ? "Cadastro Medula Óssea" : "Campanha"}
+                  </Text>
+                </View>
+                <Text style={styles.agendamentoInfo}>
+                  Data: {ag.data} - {ag.hora}
+                </Text>
+                <Text style={styles.agendamentoInfo}>
+                  Local: {ag.local || "HEMOSE"}
+                </Text>
+                <Text style={styles.agendamentoInfo}>
+                  Protocolo: {ag.protocolo}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {doador && agendamentos && agendamentos.length === 0 && (
+          <View style={styles.searchResults}>
+            <Text style={styles.noAgendamentos}>
+              ✓ CPF consultado. Nenhum agendamento ativo encontrado.
+            </Text>
+          </View>
+        )}
 
         <View style={styles.cards}>
           <View style={styles.card}>
@@ -1129,6 +1205,7 @@ export default function DoarScreen() {
             <View style={styles.modalBody}>
               <ScrollView
                 keyboardShouldPersistTaps="handled"
+                nestedScrollEnabled
                 contentContainerStyle={{ paddingBottom: 30 }}
               >
                 {step === 0 && (
@@ -1264,9 +1341,8 @@ export default function DoarScreen() {
                       </Text>
                       <View style={styles.yesNoRow}>
                         {["Sim", "Não"].map((opt, idx) => {
-                          const key = `primeiraVez_${
-                            opt === "Sim" ? "true" : "false"
-                          }`;
+                          const key = `primeiraVez_${opt === "Sim" ? "true" : "false"
+                            }`;
                           const selected =
                             opt === "Sim"
                               ? preTriagem.primeiraVez === true
@@ -1356,9 +1432,8 @@ export default function DoarScreen() {
                       </Text>
                       <View style={styles.yesNoRow}>
                         {["Sim", "Não"].map((opt) => {
-                          const key = `pesaMais50_${
-                            opt === "Sim" ? "true" : "false"
-                          }`;
+                          const key = `pesaMais50_${opt === "Sim" ? "true" : "false"
+                            }`;
                           const selected =
                             opt === "Sim"
                               ? preTriagem.pesaMais50 === true
@@ -1449,9 +1524,8 @@ export default function DoarScreen() {
                       </Text>
                       <View style={styles.yesNoRow}>
                         {["Sim", "Não"].map((opt) => {
-                          const key = `tatuagemRecente_${
-                            opt === "Sim" ? "true" : "false"
-                          }`;
+                          const key = `tatuagemRecente_${opt === "Sim" ? "true" : "false"
+                            }`;
                           const selected =
                             opt === "Sim"
                               ? preTriagem.tatuagemRecente === true
@@ -1614,9 +1688,8 @@ export default function DoarScreen() {
                         </Text>
                         <View style={styles.yesNoRow}>
                           {["Sim", "Não"].map((opt) => {
-                            const key = `gravida_${
-                              opt === "Sim" ? "true" : "false"
-                            }`;
+                            const key = `gravida_${opt === "Sim" ? "true" : "false"
+                              }`;
                             const selected =
                               opt === "Sim"
                                 ? preTriagem.gravidaOuAmamentando === true
@@ -2070,8 +2143,8 @@ export default function DoarScreen() {
                             {selectedSex === "M"
                               ? "Masculino"
                               : selectedSex === "F"
-                              ? "Feminino"
-                              : "Selecione o sexo"}
+                                ? "Feminino"
+                                : "Selecione o sexo"}
                           </Text>
                           <Ionicons
                             name="chevron-down"
@@ -2169,7 +2242,7 @@ export default function DoarScreen() {
                             style={[
                               styles.smallPill,
                               selectedLocal &&
-                              selectedLocal.id === "hemose_sede"
+                                selectedLocal.id === "hemose_sede"
                                 ? { backgroundColor: "#34D399" }
                                 : null,
                             ]}
@@ -2209,13 +2282,13 @@ export default function DoarScreen() {
                                 fontWeight: "700",
                                 color:
                                   selectedLocal &&
-                                  selectedLocal.id === "hemose_sede"
+                                    selectedLocal.id === "hemose_sede"
                                     ? "#fff"
                                     : Colors.light.text,
                               }}
                             >
                               {selectedLocal &&
-                              selectedLocal.id === "hemose_sede"
+                                selectedLocal.id === "hemose_sede"
                                 ? "✓ Selecionado"
                                 : "Selecionar"}
                             </Text>
@@ -2309,8 +2382,8 @@ export default function DoarScreen() {
                             selectedLocal?.id === "hemose_sede"
                               ? 1
                               : selectedLocal?.id ||
-                                selectedLocal?.cd_local ||
-                                selectedLocal?.codigo;
+                              selectedLocal?.cd_local ||
+                              selectedLocal?.codigo;
                           // CORRIGIDO: Chama HEMOSE.listarHorariosPorDia
                           const horarios = await HEMOSE.listarHorariosPorDia(
                             dateStr,
@@ -2359,81 +2432,132 @@ export default function DoarScreen() {
                             </Text>
                           </View>
                         ) : blocosByDate.length > 0 ? (
-                          <FlatList
-                            data={blocosByDate}
-                            keyExtractor={(item: any, idx: number) =>
-                              String(
-                                item.id_bloco_doacao ||
-                                  item.id ||
-                                  item.cd_bloco ||
-                                  idx
-                              )
-                            }
-                            numColumns={2}
-                            renderItem={({ item }) => {
-                              const isSelected =
-                                selectedHorario?.id_bloco_doacao ===
-                                item.id_bloco_doacao;
-                              return (
-                                <TouchableOpacity
-                                  style={[
-                                    styles.horarioButton,
-                                    isSelected
-                                      ? styles.horarioButtonSelected
-                                      : null,
-                                  ]}
-                                  onPress={() => {
-                                    setSelectedHorario(item);
-                                    setFormData({
-                                      ...formData,
-                                      id_bloco_doacao:
-                                        item.id_bloco_doacao ||
-                                        item.id ||
-                                        item.cd_bloco ||
-                                        item.id_bloco,
-                                    });
-                                  }}
-                                >
-                                  <View
-                                    style={{
-                                      flexDirection: "row",
-                                      alignItems: "center",
-                                      justifyContent: "center",
-                                    }}
+                          <View>
+                            {/* Blocos de Hora */}
+                            <View style={styles.blocosHoraContainer}>
+                              {Object.keys(agruparHorariosPorBloco(blocosByDate))
+                                .sort()
+                                .map((horaBloco) => (
+                                  <TouchableOpacity
+                                    key={horaBloco}
+                                    style={[
+                                      styles.blocoHoraButton,
+                                      selectedBlocoHora === horaBloco &&
+                                      styles.blocoHoraButtonSelected,
+                                    ]}
+                                    onPress={() => setSelectedBlocoHora(horaBloco)}
                                   >
                                     <Ionicons
-                                      name="time-outline"
-                                      size={16}
-                                      color={isSelected ? "#fff" : RED}
+                                      name="time"
+                                      size={18}
+                                      color={
+                                        selectedBlocoHora === horaBloco
+                                          ? "#fff"
+                                          : RED
+                                      }
                                     />
                                     <Text
                                       style={[
-                                        styles.horarioButtonText,
-                                        isSelected ? { color: "#fff" } : null,
+                                        styles.blocoHoraText,
+                                        selectedBlocoHora === horaBloco && {
+                                          color: "#fff",
+                                        },
                                       ]}
                                     >
-                                      {item.hora ||
-                                        `${item.hora_inicio} - ${item.hora_fim}` ||
-                                        "Horário não informado"}
+                                      {horaBloco}
                                     </Text>
-                                  </View>
-                                  {isSelected && (
-                                    <Ionicons
-                                      name="checkmark-circle"
-                                      size={16}
-                                      color="#fff"
-                                      style={{
-                                        position: "absolute",
-                                        top: 8,
-                                        right: 8,
-                                      }}
-                                    />
-                                  )}
-                                </TouchableOpacity>
-                              );
-                            }}
-                            style={{ marginTop: 8 }}
-                          />
+                                  </TouchableOpacity>
+                                ))}
+                            </View>
+
+                            {/* Horários disponíveis no bloco selecionado */}
+                            {selectedBlocoHora && (
+                              <View style={styles.horariosDoBloco}>
+                                <Text style={styles.horariosDosBlocoTitle}>
+                                  Horários disponíveis às {selectedBlocoHora}
+                                </Text>
+                                <FlatList
+                                  data={
+                                    agruparHorariosPorBloco(blocosByDate)[
+                                    selectedBlocoHora
+                                    ]
+                                  }
+                                  keyExtractor={(item: any, idx: number) =>
+                                    String(
+                                      item.id_bloco_doacao ||
+                                      item.id ||
+                                      item.cd_bloco ||
+                                      idx
+                                    )
+                                  }
+                                  numColumns={2}
+                                  renderItem={({ item }) => {
+                                    const isSelected =
+                                      selectedHorario?.id_bloco_doacao ===
+                                      item.id_bloco_doacao;
+                                    return (
+                                      <TouchableOpacity
+                                        style={[
+                                          styles.horarioButton,
+                                          isSelected
+                                            ? styles.horarioButtonSelected
+                                            : null,
+                                        ]}
+                                        onPress={() => {
+                                          setSelectedHorario(item);
+                                          setFormData({
+                                            ...formData,
+                                            id_bloco_doacao:
+                                              item.id_bloco_doacao ||
+                                              item.id ||
+                                              item.cd_bloco ||
+                                              item.id_bloco,
+                                          });
+                                        }}
+                                      >
+                                        <View
+                                          style={{
+                                            flexDirection: "row",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                          }}
+                                        >
+                                          <Ionicons
+                                            name="time-outline"
+                                            size={16}
+                                            color={isSelected ? "#fff" : RED}
+                                          />
+                                          <Text
+                                            style={[
+                                              styles.horarioButtonText,
+                                              isSelected ? { color: "#fff" } : null,
+                                            ]}
+                                          >
+                                            {item.hora ||
+                                              `${item.hora_inicio} - ${item.hora_fim}` ||
+                                              "Horário não informado"}
+                                          </Text>
+                                        </View>
+                                        {isSelected && (
+                                          <Ionicons
+                                            name="checkmark-circle"
+                                            size={16}
+                                            color="#fff"
+                                            style={{
+                                              position: "absolute",
+                                              top: 8,
+                                              right: 8,
+                                            }}
+                                          />
+                                        )}
+                                      </TouchableOpacity>
+                                    );
+                                  }}
+                                  style={{ marginTop: 8 }}
+                                />
+                              </View>
+                            )}
+                          </View>
                         ) : (
                           <View style={styles.emptyState}>
                             <Ionicons
@@ -2470,10 +2594,10 @@ export default function DoarScreen() {
                             {agendamentoType === "D"
                               ? "Doação de Sangue"
                               : agendamentoType === "M"
-                              ? "Cadastro de Medula Óssea"
-                              : agendamentoType === "C"
-                              ? "Campanha"
-                              : "Não especificado"}
+                                ? "Cadastro de Medula Óssea"
+                                : agendamentoType === "C"
+                                  ? "Campanha"
+                                  : "Não especificado"}
                           </Text>
                         </View>
                       </View>
@@ -2514,14 +2638,14 @@ export default function DoarScreen() {
                           <Text style={styles.verificationValue}>
                             {selectedDate
                               ? (() => {
-                                  const date = new Date(selectedDate);
-                                  return date.toLocaleDateString("pt-BR", {
-                                    weekday: "long",
-                                    day: "numeric",
-                                    month: "long",
-                                    year: "numeric",
-                                  });
-                                })()
+                                const date = new Date(selectedDate);
+                                return date.toLocaleDateString("pt-BR", {
+                                  weekday: "long",
+                                  day: "numeric",
+                                  month: "long",
+                                  year: "numeric",
+                                });
+                              })()
                               : "Data não selecionada"}
                           </Text>
                           {selectedHorario && (
@@ -3028,7 +3152,7 @@ export default function DoarScreen() {
                     <Text style={styles.modalTitle}>
                       {formatMonthYear(
                         dobCalendarCurrent ||
-                          new Date().toISOString().slice(0, 10)
+                        new Date().toISOString().slice(0, 10)
                       )}
                     </Text>
                     <Ionicons
@@ -3063,14 +3187,14 @@ export default function DoarScreen() {
                     }
                     const weekdayShort = LocaleConfig.locales["pt-br"]
                       .dayNamesShort || [
-                      "dom",
-                      "seg",
-                      "ter",
-                      "qua",
-                      "qui",
-                      "sex",
-                      "sáb",
-                    ];
+                        "dom",
+                        "seg",
+                        "ter",
+                        "qua",
+                        "qui",
+                        "sex",
+                        "sáb",
+                      ];
                     const fd =
                       typeof LocaleConfig.firstDay === "number"
                         ? LocaleConfig.firstDay
@@ -3104,69 +3228,69 @@ export default function DoarScreen() {
                         </View>
                         {showYearPicker
                           ? (() => {
-                              const currentYear = new Date().getFullYear();
-                              const years: number[] = [];
-                              for (let y = currentYear; y >= 1900; y--)
-                                years.push(y);
-                              const selectedYear = dobCalendarCurrent
-                                ? parseInt(dobCalendarCurrent.slice(0, 4), 10)
-                                : currentYear;
-                              return (
-                                <View style={styles.dobYearList}>
-                                  <FlatList
-                                    ref={yearListRef}
-                                    data={years}
-                                    keyExtractor={(y) => String(y)}
-                                    getItemLayout={(_, index) => ({
-                                      length: yearItemHeight || 40,
-                                      offset: (yearItemHeight || 40) * index,
-                                      index,
-                                    })}
-                                    initialNumToRender={12}
-                                    renderItem={({ item }) => {
-                                      const isSel = item === selectedYear;
-                                      return (
-                                        <Pressable
-                                          onPress={() => {
-                                            const base =
-                                              dobCalendarCurrent ||
-                                              new Date()
-                                                .toISOString()
-                                                .slice(0, 10);
-                                            const m = String(base).match(
-                                              /^(\d{4})-(\d{2})-(\d{2})$/
-                                            );
-                                            const mm = m ? m[2] : "01";
-                                            const dd = m ? m[3] : "01";
-                                            const iso = `${item}-${mm}-${dd}`;
-                                            setDobCalendarCurrent(iso);
-                                            setShowYearPicker(false);
-                                          }}
+                            const currentYear = new Date().getFullYear();
+                            const years: number[] = [];
+                            for (let y = currentYear; y >= 1900; y--)
+                              years.push(y);
+                            const selectedYear = dobCalendarCurrent
+                              ? parseInt(dobCalendarCurrent.slice(0, 4), 10)
+                              : currentYear;
+                            return (
+                              <View style={styles.dobYearList}>
+                                <FlatList
+                                  ref={yearListRef}
+                                  data={years}
+                                  keyExtractor={(y) => String(y)}
+                                  getItemLayout={(_, index) => ({
+                                    length: yearItemHeight || 40,
+                                    offset: (yearItemHeight || 40) * index,
+                                    index,
+                                  })}
+                                  initialNumToRender={12}
+                                  renderItem={({ item }) => {
+                                    const isSel = item === selectedYear;
+                                    return (
+                                      <Pressable
+                                        onPress={() => {
+                                          const base =
+                                            dobCalendarCurrent ||
+                                            new Date()
+                                              .toISOString()
+                                              .slice(0, 10);
+                                          const m = String(base).match(
+                                            /^(\d{4})-(\d{2})-(\d{2})$/
+                                          );
+                                          const mm = m ? m[2] : "01";
+                                          const dd = m ? m[3] : "01";
+                                          const iso = `${item}-${mm}-${dd}`;
+                                          setDobCalendarCurrent(iso);
+                                          setShowYearPicker(false);
+                                        }}
+                                        style={[
+                                          styles.yearItem,
+                                          isSel
+                                            ? styles.yearItemSelected
+                                            : null,
+                                        ]}
+                                      >
+                                        <Text
                                           style={[
-                                            styles.yearItem,
+                                            styles.yearItemText,
                                             isSel
-                                              ? styles.yearItemSelected
+                                              ? styles.yearItemTextSelected
                                               : null,
                                           ]}
                                         >
-                                          <Text
-                                            style={[
-                                              styles.yearItemText,
-                                              isSel
-                                                ? styles.yearItemTextSelected
-                                                : null,
-                                            ]}
-                                          >
-                                            {item}
-                                          </Text>
-                                        </Pressable>
-                                      );
-                                    }}
-                                    style={{ maxHeight: 220 }}
-                                  />
-                                </View>
-                              );
-                            })()
+                                          {item}
+                                        </Text>
+                                      </Pressable>
+                                    );
+                                  }}
+                                  style={{ maxHeight: 220 }}
+                                />
+                              </View>
+                            );
+                          })()
                           : null}
                         <Calendar
                           markingType={"custom"}
@@ -3289,6 +3413,126 @@ export default function DoarScreen() {
             </View>
           </Modal>
         ) : null}
+
+        {/* Modal: Seleção de Canais de Notificação */}
+        <Modal visible={showNotificationModal} animationType="slide" transparent>
+          <View style={styles.modalOverlay}>
+            <View style={styles.notificationChannelModal}>
+              <View style={styles.notificationChannelHeader}>
+                <Text style={styles.notificationChannelTitle}>
+                  Como deseja receber notificações?
+                </Text>
+                <Text style={styles.notificationChannelSubtitle}>
+                  Selecione os canais para receber confirmações e lembretes
+                </Text>
+              </View>
+
+              <View style={styles.channelOptionsContainer}>
+                {/* Email - Obrigatório */}
+                <View style={styles.channelOption}>
+                  <View style={styles.channelIconContainer}>
+                    <Ionicons name="mail" size={24} color="#DC2626" />
+                  </View>
+                  <View style={styles.channelInfo}>
+                    <Text style={styles.channelName}>E-mail</Text>
+                    <Text style={styles.channelRequired}>Obrigatório</Text>
+                  </View>
+                  <View style={[styles.channelCheckbox, styles.channelCheckboxActive]}>
+                    <Ionicons name="checkmark" size={20} color="#fff" />
+                  </View>
+                </View>
+
+                {/* SMS - Obrigatório */}
+                <View style={styles.channelOption}>
+                  <View style={styles.channelIconContainer}>
+                    <Ionicons name="chatbubble" size={24} color="#DC2626" />
+                  </View>
+                  <View style={styles.channelInfo}>
+                    <Text style={styles.channelName}>SMS</Text>
+                    <Text style={styles.channelRequired}>Obrigatório</Text>
+                  </View>
+                  <View style={[styles.channelCheckbox, styles.channelCheckboxActive]}>
+                    <Ionicons name="checkmark" size={20} color="#fff" />
+                  </View>
+                </View>
+
+                {/* WhatsApp - Opcional */}
+                <TouchableOpacity
+                  style={styles.channelOption}
+                  onPress={() =>
+                    setNotificationChannels({
+                      ...notificationChannels,
+                      whatsapp: !notificationChannels.whatsapp,
+                    })
+                  }
+                >
+                  <View style={styles.channelIconContainer}>
+                    <Ionicons name="logo-whatsapp" size={24} color="#25D366" />
+                  </View>
+                  <View style={styles.channelInfo}>
+                    <Text style={styles.channelName}>WhatsApp</Text>
+                    <Text style={styles.channelOptional}>Opcional</Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.channelCheckbox,
+                      notificationChannels.whatsapp &&
+                      styles.channelCheckboxActive,
+                    ]}
+                  >
+                    {notificationChannels.whatsapp && (
+                      <Ionicons name="checkmark" size={20} color="#fff" />
+                    )}
+                  </View>
+                </TouchableOpacity>
+
+                {/* Push - Opcional */}
+                <TouchableOpacity
+                  style={styles.channelOption}
+                  onPress={() =>
+                    setNotificationChannels({
+                      ...notificationChannels,
+                      push: !notificationChannels.push,
+                    })
+                  }
+                >
+                  <View style={styles.channelIconContainer}>
+                    <Ionicons name="notifications" size={24} color="#DC2626" />
+                  </View>
+                  <View style={styles.channelInfo}>
+                    <Text style={styles.channelName}>Notificações Push</Text>
+                    <Text style={styles.channelOptional}>Opcional</Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.channelCheckbox,
+                      notificationChannels.push &&
+                      styles.channelCheckboxActive,
+                    ]}
+                  >
+                    {notificationChannels.push && (
+                      <Ionicons name="checkmark" size={20} color="#fff" />
+                    )}
+                  </View>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.notificationChannelFooter}>
+                <Text style={styles.notificationChannelNote}>
+                  💡 Você receberá lembretes 24h antes da sua doação
+                </Text>
+                <TouchableOpacity
+                  style={styles.confirmChannelsButton}
+                  onPress={confirmNotificationChannels}
+                >
+                  <Text style={styles.confirmChannelsButtonText}>
+                    Confirmar e Continuar
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
 
         {/* Confirmation Modal */}
         <Modal visible={confirmationVisible} animationType="fade" transparent>
@@ -3614,6 +3858,52 @@ const styles = StyleSheet.create({
     flexDirection: "row",
   },
   infoButtonText: { color: "#FFFFFF", fontWeight: "600", marginLeft: 8 },
+  searchResults: {
+    backgroundColor: "#FFF",
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+    shadowColor: "#000",
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  searchResultsTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#111827",
+    marginBottom: 12,
+  },
+  agendamentoCard: {
+    backgroundColor: "#F9FAFB",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: "#DC2626",
+  },
+  agendamentoHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  agendamentoTipo: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#111827",
+    marginLeft: 8,
+  },
+  agendamentoInfo: {
+    fontSize: 13,
+    color: "#6B7280",
+    marginBottom: 4,
+  },
+  noAgendamentos: {
+    fontSize: 14,
+    color: "#10B981",
+    textAlign: "center",
+    fontWeight: "500",
+  },
   modalContainer: { flex: 1, backgroundColor: Colors.light.background },
   modalHeader: {
     flexDirection: "row",
@@ -3802,6 +4092,43 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFF",
     borderWidth: 2,
     borderColor: "#E73645",
+  },
+  blocosHoraContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 12,
+  },
+  blocoHoraButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    backgroundColor: "#fff",
+    borderWidth: 2,
+    borderColor: "#E73645",
+    borderRadius: 20,
+    gap: 6,
+  },
+  blocoHoraButtonSelected: {
+    backgroundColor: "#E73645",
+  },
+  blocoHoraText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#E73645",
+  },
+  horariosDoBloco: {
+    marginTop: 16,
+    padding: 12,
+    backgroundColor: "#F9FAFB",
+    borderRadius: 12,
+  },
+  horariosDosBlocoTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#374151",
+    marginBottom: 8,
   },
   horarioButton: {
     flex: 0.48,
@@ -4162,6 +4489,103 @@ const styles = StyleSheet.create({
   yearItemSelected: { backgroundColor: "#E73645" },
   yearItemText: { color: Colors.light.text },
   yearItemTextSelected: { color: "#fff", fontWeight: "700" },
+  notificationChannelModal: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    width: "100%",
+    maxHeight: "80%",
+  },
+  notificationChannelHeader: {
+    marginBottom: 24,
+  },
+  notificationChannelTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#111827",
+    marginBottom: 8,
+  },
+  notificationChannelSubtitle: {
+    fontSize: 14,
+    color: "#6B7280",
+  },
+  channelOptionsContainer: {
+    gap: 12,
+    marginBottom: 24,
+  },
+  channelOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    backgroundColor: "#F9FAFB",
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: "#E5E7EB",
+  },
+  channelIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  channelInfo: {
+    flex: 1,
+  },
+  channelName: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#111827",
+    marginBottom: 2,
+  },
+  channelRequired: {
+    fontSize: 12,
+    color: "#DC2626",
+    fontWeight: "500",
+  },
+  channelOptional: {
+    fontSize: 12,
+    color: "#6B7280",
+  },
+  channelCheckbox: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: "#D1D5DB",
+    backgroundColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  channelCheckboxActive: {
+    backgroundColor: "#DC2626",
+    borderColor: "#DC2626",
+  },
+  notificationChannelFooter: {
+    borderTopWidth: 1,
+    borderTopColor: "#E5E7EB",
+    paddingTop: 16,
+  },
+  notificationChannelNote: {
+    fontSize: 13,
+    color: "#6B7280",
+    textAlign: "center",
+    marginBottom: 16,
+  },
+  confirmChannelsButton: {
+    backgroundColor: "#DC2626",
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  confirmChannelsButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#fff",
+  },
   confirmationOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",

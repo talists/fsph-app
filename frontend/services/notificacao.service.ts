@@ -16,11 +16,26 @@ Notifications.setNotificationHandler({
 });
 
 export interface NotificationData extends Record<string, unknown> {
-  type: "blood_alert" | "appointment_reminder" | "campaign" | "general";
+  type:
+  | "blood_critical_general"      // Sangue crítico (qualquer tipo)
+  | "blood_critical_user"          // Sangue do tipo do usuário está crítico
+  | "appointment_scheduled"        // Agendamento confirmado
+  | "appointment_reminder_2days"   // Lembrete 2 dias antes
+  | "appointment_reminder_1day"    // Lembrete 1 dia antes
+  | "appointment_reminder_today"   // Lembrete no dia
+  | "appointment_approaching"      // Agendamento próximo (2h antes)
+  | "campaign_new"                 // Nova campanha
+  | "general";
   bloodType?: string;
   urgencyLevel?: "critical" | "alert" | "normal";
   appointmentId?: string;
+  appointmentProtocol?: string;
+  appointmentDate?: string;
+  appointmentTime?: string;
+  appointmentLocation?: string;
   campaignId?: string;
+  campaignTitle?: string;
+  priority: number; // 1=highest, 5=lowest
 }
 
 class NotificationService {
@@ -59,18 +74,19 @@ class NotificationService {
     }
 
     try {
-      // Obtém o token do Expo (que gerencia o FCM por baixo dos panos no Android)
-      const token = await Notifications.getExpoPushTokenAsync({
-        projectId: process.env.EXPO_PUBLIC_PROJECT_ID || "your-project-id",
-      });
+      // Apenas notificações locais por enquanto - não precisa de token push remoto
+      // O Expo Go não suporta push notifications nativamente sem configuração do Firebase
+      console.log("✅ Permissões de notificação concedidas (usando notificações locais)");
+      return null;
 
-      this.expoPushToken = token.data;
-
-      // Salva o token no backend para receber notificações remotas
-      await this.saveTokenToBackend(token.data);
-
-      console.log("✅ Push token registrado:", token.data);
-      return token.data;
+      // TODO: Descomentar quando Firebase estiver configurado
+      // const token = await Notifications.getExpoPushTokenAsync({
+      //   projectId: process.env.EXPO_PUBLIC_PROJECT_ID || "your-project-id",
+      // });
+      // this.expoPushToken = token.data;
+      // await this.saveTokenToBackend(token.data);
+      // console.log("✅ Push token registrado:", token.data);
+      // return token.data;
     } catch (error) {
       console.error("Erro ao obter push token:", error);
       return null;
@@ -101,21 +117,21 @@ class NotificationService {
   }
 
   /**
-   * Agenda notificação local para alertas de estoque
+   * Agenda notificação local para alertas de estoque GERAL (qualquer tipo sanguíneo)
    */
-  async scheduleBloodStockNotification(
+  async scheduleBloodStockNotificationGeneral(
     bloodType: string,
     urgencyLevel: "critical" | "alert"
   ): Promise<void> {
     const title =
       urgencyLevel === "critical"
-        ? `🚨 Sangue ${bloodType} - CRÍTICO`
-        : `⚠️ Sangue ${bloodType} - ALERTA`;
+        ? `🚨 Estoque Crítico - Sangue ${bloodType}`
+        : `⚠️ Estoque Baixo - Sangue ${bloodType}`;
 
     const body =
       urgencyLevel === "critical"
-        ? `O estoque de sangue ${bloodType} está em estado crítico! Sua doação é urgente e pode salvar vidas.`
-        : `O estoque de sangue ${bloodType} está baixo. Considere agendar uma doação.`;
+        ? `O estoque de sangue ${bloodType} está em estado crítico! Convide amigos e familiares para doar.`
+        : `O estoque de sangue ${bloodType} está baixo. Ajude a divulgar!`;
 
     await Notifications.scheduleNotificationAsync({
       content: {
@@ -124,12 +140,13 @@ class NotificationService {
         sound: urgencyLevel === "critical" ? "default" : undefined,
         priority:
           urgencyLevel === "critical"
-            ? Notifications.AndroidNotificationPriority.HIGH
+            ? Notifications.AndroidNotificationPriority.MAX
             : Notifications.AndroidNotificationPriority.DEFAULT,
         data: {
-          type: "blood_alert",
+          type: "blood_critical_general",
           bloodType,
           urgencyLevel,
+          priority: urgencyLevel === "critical" ? 1 : 3,
         } as NotificationData,
       },
       trigger: null, // Show immediately
@@ -137,57 +154,163 @@ class NotificationService {
   }
 
   /**
-   * Agenda lembretes de agendamento
+   * Agenda notificação local para alertas de estoque do TIPO DO USUÁRIO
    */
-  async scheduleAppointmentReminder(
-    appointmentId: string,
+  async scheduleBloodStockNotificationUser(
+    bloodType: string,
+    urgencyLevel: "critical" | "alert"
+  ): Promise<void> {
+    const title =
+      urgencyLevel === "critical"
+        ? `🚨 SEU SANGUE ${bloodType} ESTÁ CRÍTICO!`
+        : `⚠️ Seu Sangue ${bloodType} em Alerta`;
+
+    const body =
+      urgencyLevel === "critical"
+        ? `O estoque do SEU tipo sanguíneo (${bloodType}) está CRÍTICO! Sua doação pode salvar vidas AGORA!`
+        : `O estoque do seu tipo sanguíneo (${bloodType}) está baixo. Considere agendar uma doação em breve.`;
+
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title,
+        body,
+        sound: "default",
+        priority: Notifications.AndroidNotificationPriority.MAX,
+        vibrate: [0, 250, 250, 250],
+        data: {
+          type: "blood_critical_user",
+          bloodType,
+          urgencyLevel,
+          priority: 1, // Highest priority - user's own blood type
+        } as NotificationData,
+      },
+      trigger: null, // Show immediately
+    });
+  }
+
+  /**
+   * Notificação de agendamento confirmado
+   */
+  async sendAppointmentConfirmation(
+    protocol: string,
     appointmentDate: Date,
     location: string
   ): Promise<void> {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: "✅ Agendamento Confirmado!",
+        body: `Sua doação foi agendada para ${appointmentDate.toLocaleDateString(
+          "pt-BR"
+        )} às ${appointmentDate.toLocaleTimeString("pt-BR", {
+          hour: "2-digit",
+          minute: "2-digit",
+        })} no ${location}.\n\nProtocolo: ${protocol}`,
+        sound: "default",
+        priority: Notifications.AndroidNotificationPriority.HIGH,
+        data: {
+          type: "appointment_scheduled",
+          appointmentProtocol: protocol,
+          appointmentDate: appointmentDate.toISOString(),
+          appointmentLocation: location,
+          priority: 2,
+        } as NotificationData,
+      },
+      trigger: null,
+    });
+  }
+
+  /**
+   * Agenda lembretes de agendamento (2 dias antes, 1 dia antes, no dia)
+   */
+  async scheduleAppointmentReminder(
+    protocol: string,
+    appointmentDate: Date,
+    location: string
+  ): Promise<string[]> {
     const now = new Date();
+    const notificationIds: string[] = [];
+
+    // Lembrete 2 dias antes
     const twoDaysBefore = new Date(
       appointmentDate.getTime() - 2 * 24 * 60 * 60 * 1000
     );
-    const appointmentDay = new Date(
-      appointmentDate.getTime() - 2 * 60 * 60 * 1000
-    ); // 2 hours before
-
-    // Agenda lembrete 2 dias antes
     if (twoDaysBefore > now) {
-      await Notifications.scheduleNotificationAsync({
+      const id = await Notifications.scheduleNotificationAsync({
         content: {
-          title: "📅 Lembrete de Doação",
+          title: "📅 Lembrete: Doação em 2 dias",
           body: `Sua doação está agendada para ${appointmentDate.toLocaleDateString(
             "pt-BR"
-          )} no ${location}. Não se esqueça!`,
+          )} no ${location}. Prepare-se: durma bem, hidrate-se e faça refeições leves!`,
+          sound: "default",
           data: {
-            type: "appointment_reminder",
-            appointmentId,
+            type: "appointment_reminder_2days",
+            appointmentProtocol: protocol,
+            appointmentDate: appointmentDate.toISOString(),
+            appointmentLocation: location,
+            priority: 2,
           } as NotificationData,
         },
-        trigger: twoDaysBefore as any,
+        trigger: twoDaysBefore,
       });
+      notificationIds.push(id);
     }
 
-    // Agenda lembrete no dia (2h antes)
-    if (appointmentDay > now) {
-      await Notifications.scheduleNotificationAsync({
+    // Lembrete 1 dia antes
+    const oneDayBefore = new Date(
+      appointmentDate.getTime() - 24 * 60 * 60 * 1000
+    );
+    if (oneDayBefore > now) {
+      const id = await Notifications.scheduleNotificationAsync({
         content: {
-          title: "⏰ Doação Hoje!",
-          body: `Sua doação é hoje às ${appointmentDate.toLocaleTimeString(
+          title: "⏰ Lembrete: Doação amanhã!",
+          body: `Sua doação é amanhã às ${appointmentDate.toLocaleTimeString(
             "pt-BR",
             { hour: "2-digit", minute: "2-digit" }
-          )} no ${location}. Boa sorte!`,
+          )} no ${location}. Lembre-se de levar um documento com foto!`,
           sound: "default",
           priority: Notifications.AndroidNotificationPriority.HIGH,
           data: {
-            type: "appointment_reminder",
-            appointmentId,
+            type: "appointment_reminder_1day",
+            appointmentProtocol: protocol,
+            appointmentDate: appointmentDate.toISOString(),
+            appointmentLocation: location,
+            priority: 2,
           } as NotificationData,
         },
-        trigger: appointmentDay as any,
+        trigger: oneDayBefore,
       });
+      notificationIds.push(id);
     }
+
+    // Lembrete no dia (2 horas antes)
+    const twoHoursBefore = new Date(
+      appointmentDate.getTime() - 2 * 60 * 60 * 1000
+    );
+    if (twoHoursBefore > now) {
+      const id = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: "🚨 Doação HOJE em 2 horas!",
+          body: `Sua doação é hoje às ${appointmentDate.toLocaleTimeString(
+            "pt-BR",
+            { hour: "2-digit", minute: "2-digit" }
+          )} no ${location}. Boa doação! 🩸❤️`,
+          sound: "default",
+          priority: Notifications.AndroidNotificationPriority.MAX,
+          vibrate: [0, 250, 250, 250],
+          data: {
+            type: "appointment_reminder_today",
+            appointmentProtocol: protocol,
+            appointmentDate: appointmentDate.toISOString(),
+            appointmentLocation: location,
+            priority: 1,
+          } as NotificationData,
+        },
+        trigger: twoHoursBefore,
+      });
+      notificationIds.push(id);
+    }
+
+    return notificationIds;
   }
 
   /**
@@ -214,6 +337,16 @@ class NotificationService {
       // Isso garante o parse correto dos dados e evita erro de tipagem
       const bloodStock = await bancoDeSangueService.getBloodStock();
 
+      // Verifica TODOS os tipos sanguíneos críticos (alerta geral)
+      for (const stock of bloodStock) {
+        if (stock.status === "Crítico") {
+          await this.scheduleBloodStockNotificationGeneral(stock.tipo, "critical");
+        } else if (stock.status === "Alerta") {
+          await this.scheduleBloodStockNotificationGeneral(stock.tipo, "alert");
+        }
+      }
+
+      // Verifica especificamente o tipo do usuário (alerta personalizado com prioridade maior)
       const userBloodStock = bloodStock.find(
         (stock) => stock.tipo === userBloodType
       );
@@ -221,9 +354,9 @@ class NotificationService {
       if (userBloodStock) {
         // Verifica as strings retornadas pelo serviço (que normalizou para "Crítico" com acento)
         if (userBloodStock.status === "Crítico") {
-          await this.scheduleBloodStockNotification(userBloodType, "critical");
+          await this.scheduleBloodStockNotificationUser(userBloodType, "critical");
         } else if (userBloodStock.status === "Alerta") {
-          await this.scheduleBloodStockNotification(userBloodType, "alert");
+          await this.scheduleBloodStockNotificationUser(userBloodType, "alert");
         }
       }
     } catch (error) {
@@ -232,7 +365,7 @@ class NotificationService {
   }
 
   /**
-   * Envia notificação de campanha (Local)
+   * Envia notificação de nova campanha (Mockada por enquanto)
    */
   async sendCampaignNotification(
     title: string,
@@ -241,15 +374,43 @@ class NotificationService {
   ): Promise<void> {
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: `🎯 ${title}`,
+        title: `🎯 Nova Campanha: ${title}`,
         body: message,
+        sound: "default",
+        priority: Notifications.AndroidNotificationPriority.DEFAULT,
         data: {
-          type: "campaign",
+          type: "campaign_new",
           campaignId,
+          campaignTitle: title,
+          priority: 3,
         } as NotificationData,
       },
       trigger: null,
     });
+  }
+
+  /**
+   * Envia notificações mockadas de campanhas para demonstração
+   */
+  async sendMockCampaignNotifications(): Promise<void> {
+    const campaigns = [
+      {
+        title: "Junho Vermelho",
+        message: "Participe do movimento nacional de doação de sangue! Meta: 1000 doações neste mês.",
+      },
+      {
+        title: "Campanha Empresa ABC",
+        message: "A Empresa ABC está promovendo uma campanha de doação. Participe e ganhe brindes!",
+      },
+      {
+        title: "Doação Solidária",
+        message: "Junte-se à nossa campanha solidária e ajude pacientes em tratamento.",
+      },
+    ];
+
+    // Escolhe uma campanha aleatória
+    const campaign = campaigns[Math.floor(Math.random() * campaigns.length)];
+    await this.sendCampaignNotification(campaign.title, campaign.message, `mock_${Date.now()}`);
   }
 
   /**

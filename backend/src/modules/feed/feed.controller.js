@@ -12,9 +12,10 @@ export class FeedController {
       const file = req.file;
 
       const post = await FeedService.createPost(usuario, file, description);
+
       res.status(201).json(post);
     } catch (err) {
-      if (err.message == "A imagem é obrigatória"){
+      if (err.message == "A imagem é obrigatória") {
         return res.status(400).json({ message: err.message })
       }
       res.status(500).json({ message: err.message });

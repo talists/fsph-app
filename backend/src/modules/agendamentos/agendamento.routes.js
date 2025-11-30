@@ -24,6 +24,6 @@ router.get("/apiagendamento/blocoagendamento/listarByDate/:dateSelected/:id_loca
 
 router.post("/apiagendamento/agendamento/marcar", verifyToken, upload.single("caminho_autorizacao"), AgendamentoController.marcarAgendamento);
 router.patch("/apiagendamento/agendamento/editar", verifyToken, upload.single("caminho_autorizacao"), AgendamentoController.update);
-router.delete("/apiagendamento/agendamento/desmarcar/:id/:protocolo", verifyToken, AgendamentoController.remove);
+router.delete("/apiagendamento/agendamento/desmarcar/:protocolo", verifyToken, AgendamentoController.desmarcarAgendamentoFSPH);
 
 export default router;

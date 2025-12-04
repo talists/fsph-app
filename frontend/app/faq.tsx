@@ -352,10 +352,7 @@ export default function FAQScreen() {
                                 <Ionicons name="search-outline" size={48} color="#9CA3AF" />
                                 <Text style={styles.noResultsTitle}>Nenhum resultado encontrado</Text>
                                 <Text style={styles.noResultsText}>
-                                    Não encontramos perguntas sobre "{searchQuery}" na categoria {currentCategory?.title}.
-                                    <Text>{
-                                        '\n\n'
-                                    }</Text>Tente usar termos diferentes, verificar a outra categoria ou faça sua pergunta na seção abaixo.
+                                    {`Não encontramos perguntas sobre "${searchQuery}" na categoria ${currentCategory?.title}.\n\nTente usar termos diferentes, verificar a outra categoria ou faça sua pergunta na seção abaixo.`}
                                 </Text>
                             </View>
                         ) : (

@@ -40,6 +40,7 @@ const REFRESH_CONFIG = {
 export default function HomeScreen() {
   const router = useRouter();
   const [bloodStock, setBloodStock] = useState<BloodStock[]>([]);
+  const [lastNotifiedStockState, setLastNotifiedStockState] = useState<{ [key: string]: string }>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
@@ -123,17 +124,35 @@ export default function HomeScreen() {
       setLastUpdate(new Date());
       setError(null);
 
-      // 🔔 VERIFICAR E ENVIAR NOTIFICAÇÕES DE ESTOQUE - TEMPORARIAMENTE DESABILITADO
-      // if (user && user.tipo_sanguineo) {
-      //   const userBloodType = user.tipo_sanguineo;
+      // 🔔 VERIFICAR E ENVIAR NOTIFICAÇÕES DE ESTOQUE APENAS SE HOUVER ALTERAÇÃO
+      if (user && user.tipo_sanguineo) {
+        const userBloodType = user.tipo_sanguineo;
 
-      //   // Envia notificações automáticas baseadas no estoque
-      //   try {
-      //     await notificationService.checkBloodStockAndAlert(userBloodType);
-      //   } catch (notifError) {
-      //     console.error("Erro ao enviar notificações de estoque:", notifError);
-      //   }
-      // }
+        // Comparar estado anterior com o novo
+        let hasChanges = false;
+        const newNotifiedState = { ...lastNotifiedStockState };
+
+        transformedData.forEach((stock) => {
+          const previousState = lastNotifiedStockState[stock.tipo];
+          if (previousState !== stock.status) {
+            hasChanges = true;
+            newNotifiedState[stock.tipo] = stock.status;
+          }
+        });
+
+        // Apenas enviar notificações se houver alteração
+        if (hasChanges) {
+          try {
+            console.log("📢 Alteração detectada no estoque, enviando notificações...");
+            await notificationService.checkBloodStockAndAlert(userBloodType);
+            setLastNotifiedStockState(newNotifiedState);
+          } catch (notifError) {
+            console.error("Erro ao enviar notificações de estoque:", notifError);
+          }
+        } else {
+          console.log("✅ Estoque sem alterações, notificações não enviadas");
+        }
+      }
 
       if (user && user.tipo_sanguineo) {
         const userBloodType = user.tipo_sanguineo;

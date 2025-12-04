@@ -278,9 +278,19 @@ export default function NotificationsScreen() {
       case "unread":
         return notifications.filter((n) => !n.read);
       case "blood_alert":
-        return notifications.filter((n) => n.type === "blood_alert");
+        return notifications.filter((n) =>
+          n.type === "blood_critical_general" ||
+          n.type === "blood_critical_user" ||
+          n.type === "blood_alert"
+        );
       case "appointment_reminder":
-        return notifications.filter((n) => n.type === "appointment_reminder");
+        return notifications.filter((n) =>
+          n.type === "appointment_reminder" ||
+          n.type === "appointment_reminder_2days" ||
+          n.type === "appointment_reminder_1day" ||
+          n.type === "appointment_reminder_today" ||
+          n.type === "appointment_scheduled"
+        );
       default:
         return notifications;
     }

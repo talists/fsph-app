@@ -466,41 +466,41 @@ export default function DoarScreen() {
   const sendNotifications = async (payload: any) => {
     setSendingNotifications(true);
     try {
-      // 🔔 NOTIFICAÇÕES AUTOMÁTICAS DO SISTEMA - TEMPORARIAMENTE DESABILITADO
-      // if (payload.tipo && selectedHorario && selectedLocal) {
-      //   try {
-      //     // Criar data do agendamento
-      //     const [year, month, day] = selectedDate!.split("-").map(Number);
-      //     const [hour, minute] = selectedHorario.hora.split(":").map(Number);
-      //     const appointmentDate = new Date(year, month - 1, day, hour, minute);
+      // 🔔 NOTIFICAÇÕES AUTOMÁTICAS DO SISTEMA
+      if (payload.tipo && selectedHorario && selectedLocal) {
+        try {
+          // Criar data do agendamento
+          const [year, month, day] = selectedDate!.split("-").map(Number);
+          const [hour, minute] = selectedHorario.hora.split(":").map(Number);
+          const appointmentDate = new Date(year, month - 1, day, hour, minute);
 
-      //     const localName = selectedLocal.nome || "HEMOSE";
-      //     const protocol = payload.protocolo || `AG-${Date.now()}`;
+          const localName = selectedLocal.nome || "HEMOSE";
+          const protocol = payload.protocolo || `AG-${Date.now()}`;
 
-      //     // Envia notificação de confirmação imediatamente
-      //     await notificationService.sendAppointmentConfirmation(
-      //       protocol,
-      //       appointmentDate,
-      //       localName
-      //     );
+          // Envia notificação de confirmação imediatamente
+          await notificationService.sendAppointmentConfirmation(
+            protocol,
+            appointmentDate,
+            localName
+          );
 
-      //     // Agenda lembretes (2 dias antes, 1 dia antes, 2h antes)
-      //     await notificationService.scheduleAppointmentReminder(
-      //       protocol,
-      //       appointmentDate,
-      //       localName
-      //     );
+          // Agenda lembretes (2 dias antes, 1 dia antes, 2h antes)
+          await notificationService.scheduleAppointmentReminder(
+            protocol,
+            appointmentDate,
+            localName
+          );
 
-      //     console.log("✅ Notificações de agendamento configuradas com sucesso!");
-      //   } catch (notifError) {
-      //     console.error("Erro ao configurar notificações:", notifError);
-      //   }
-      // }
+          console.log("✅ Notificações de agendamento configuradas com sucesso!");
+        } catch (notifError) {
+          console.error("Erro ao configurar notificações:", notifError);
+        }
+      }
 
       if (user && token) {
         // Aqui poderia enviar notificação local ou chamar backend se necessário
         // await apiService.sendNotification(...)
-        console.log("✅ Notificação local simulada");
+        console.log("✅ Notificações de agendamento enviadas");
       }
 
       const message = formatConfirmationMessage(payload);
@@ -2316,8 +2316,9 @@ export default function DoarScreen() {
                                   1,
                                   agendamentoType as HEMOSE.TipoAgendamento
                                 );
-                                console.log("✅ [DATAS]", (datas || []).length, "datas encontradas");
-                                const datasFormatadas = (datas || []).map(
+                                const datasArray = Array.isArray(datas) ? datas : [];
+                                console.log("✅ [DATAS]", datasArray.length, "datas encontradas");
+                                const datasFormatadas = datasArray.map(
                                   (d: string) => ({ data: d })
                                 );
                                 setBlocosDates(datasFormatadas);
@@ -2392,9 +2393,10 @@ export default function DoarScreen() {
                                     localId,
                                     agendamentoType as HEMOSE.TipoAgendamento
                                   );
-                                  console.log("✅ [DATAS]", (res || []).length, "datas encontradas para local", localId);
+                                  const resArray = Array.isArray(res) ? res : [];
+                                  console.log("✅ [DATAS]", resArray.length, "datas encontradas para local", localId);
                                   // Formata para o objeto esperado { data: 'YYYY-MM-DD' }
-                                  const datasFormatadas = (res || []).map(
+                                  const datasFormatadas = resArray.map(
                                     (d: string) => ({ data: d })
                                   );
                                   setBlocosDates(datasFormatadas);
@@ -2541,92 +2543,91 @@ export default function DoarScreen() {
                                 ))}
                             </View>
 
-                            {/* Horários disponíveis no bloco selecionado (com FlatList dentro de View para evitar aninhamento no ScrollView) */}
+                            {/* Horários disponíveis no bloco selecionado - render direto sem FlatList */}
                             {selectedBlocoHora && (
                               <View style={styles.horariosDoBloco}>
                                 <Text style={styles.horariosDosBlocoTitle}>
                                   Horários disponíveis às {selectedBlocoHora}
                                 </Text>
-                                <View style={{ height: 200 }}>
-                                  <FlatList
-                                    scrollEnabled={true}
-                                    data={
-                                      agruparHorariosPorBloco(blocosByDate)[
-                                      selectedBlocoHora
-                                      ]
-                                    }
-                                    keyExtractor={(item: any, idx: number) =>
-                                      String(
-                                        item.id_bloco_doacao ||
-                                        item.id ||
-                                        item.cd_bloco ||
-                                        idx
-                                      )
-                                    }
-                                    numColumns={2}
-                                    renderItem={({ item }) => {
-                                      const isSelected =
-                                        selectedHorario?.id_bloco_doacao ===
-                                        item.id_bloco_doacao;
-                                      return (
-                                        <TouchableOpacity
-                                          style={[
-                                            styles.horarioButton,
-                                            isSelected
-                                              ? styles.horarioButtonSelected
-                                              : null,
-                                          ]}
-                                          onPress={() => {
-                                            setSelectedHorario(item);
-                                            setFormData({
-                                              ...formData,
-                                              id_bloco_doacao:
-                                                item.id_bloco_doacao ||
-                                                item.id ||
-                                                item.cd_bloco ||
-                                                item.id_bloco,
-                                            });
+                                <View
+                                  style={{
+                                    flexDirection: "row",
+                                    flexWrap: "wrap",
+                                    gap: 8,
+                                    marginTop: 12,
+                                  }}
+                                >
+                                  {(agruparHorariosPorBloco(blocosByDate)[
+                                    selectedBlocoHora
+                                  ] || []).map((item: any, idx: number) => {
+                                    const isSelected =
+                                      selectedHorario?.id_bloco_doacao ===
+                                      item.id_bloco_doacao;
+                                    return (
+                                      <TouchableOpacity
+                                        key={String(
+                                          item.id_bloco_doacao ||
+                                          item.id ||
+                                          item.cd_bloco ||
+                                          idx
+                                        )}
+                                        style={[
+                                          styles.horarioButton,
+                                          isSelected
+                                            ? styles.horarioButtonSelected
+                                            : null,
+                                          { flex: 1, minWidth: "48%" },
+                                        ]}
+                                        onPress={() => {
+                                          setSelectedHorario(item);
+                                          setFormData({
+                                            ...formData,
+                                            id_bloco_doacao:
+                                              item.id_bloco_doacao ||
+                                              item.id ||
+                                              item.cd_bloco ||
+                                              item.id_bloco,
+                                          });
+                                        }}
+                                      >
+                                        <View
+                                          style={{
+                                            flexDirection: "row",
+                                            alignItems: "center",
+                                            justifyContent: "center",
                                           }}
                                         >
-                                          <View
-                                            style={{
-                                              flexDirection: "row",
-                                              alignItems: "center",
-                                              justifyContent: "center",
-                                            }}
+                                          <Ionicons
+                                            name="time-outline"
+                                            size={16}
+                                            color={isSelected ? "#fff" : RED}
+                                          />
+                                          <Text
+                                            style={[
+                                              styles.horarioButtonText,
+                                              isSelected ? { color: "#fff" } : null,
+                                            ]}
                                           >
-                                            <Ionicons
-                                              name="time-outline"
-                                              size={16}
-                                              color={isSelected ? "#fff" : RED}
-                                            />
-                                            <Text
-                                              style={[
-                                                styles.horarioButtonText,
-                                                isSelected ? { color: "#fff" } : null,
-                                              ]}
-                                            >
-                                              {item.hora ||
-                                                `${item.min_hora?.slice(0, 5)} - ${item.max_hora?.slice(0, 5)}` ||
-                                                "Horário não informado"}
-                                            </Text>
-                                          </View>
-                                          {isSelected && (
-                                            <Ionicons
-                                              name="checkmark-circle"
-                                              size={16}
-                                              color="#fff"
-                                              style={{
-                                                position: "absolute",
-                                                top: 8,
-                                                right: 8,
-                                              }}
-                                            />
-                                          )}
-                                        </TouchableOpacity>
-                                      );
-                                    }}
-                                  />
+                                            {item.hora ||
+                                              `${item.min_hora?.slice(0, 5)} - ${item.max_hora?.slice(0, 5)}` ||
+                                              "Horário não informado"}
+                                          </Text>
+                                        </View>
+                                        {isSelected && (
+                                          <Ionicons
+                                            name="checkmark-circle"
+                                            size={16}
+                                            color="#fff"
+                                            style={{
+                                              position: "absolute",
+                                              top: 8,
+                                              right: 8,
+                                            }}
+                                          />
+                                        )}
+                                      </TouchableOpacity>
+                                    );
+                                  })}
                                 </View>
                               </View>
                             )}

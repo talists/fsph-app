@@ -44,9 +44,74 @@ apiService.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+// Variável para controlar requisições de refresh em andamento
+let isRefreshing = false;
+let failedQueue: Array<{ resolve: (token: string) => void; reject: (err: any) => void }> = [];
+
+const processQueue = (error: any, token: string | null = null) => {
+  failedQueue.forEach((prom) => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token || "");
+    }
+  });
+  isRefreshing = false;
+  failedQueue = [];
+};
+
 apiService.interceptors.response.use(
   (response) => response,
-  (error: AxiosError) => {
+  async (error: AxiosError) => {
+    const originalRequest = error.config as any;
+
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      if (isRefreshing) {
+        // Se um refresh está em andamento, aguarda a fila
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject });
+        })
+          .then((token) => {
+            originalRequest.headers.Authorization = `Bearer ${token}`;
+            return apiService(originalRequest);
+          })
+          .catch((err) => Promise.reject(err));
+      }
+
+      originalRequest._retry = true;
+      isRefreshing = true;
+
+      try {
+        // Tenta renovar o token
+        const refreshToken = await tokenStorage.getRefreshToken();
+        if (!refreshToken) {
+          throw new Error("Sem refresh token");
+        }
+
+        console.log("[API] 🔄 Tentando renovar token...");
+        const response = await axios.post(`${BASE_URL}/auth/refresh-token`, {
+          refreshToken,
+        });
+
+        const { accessToken, refreshToken: newRefreshToken } = response.data;
+        await tokenStorage.saveTokens(accessToken, newRefreshToken);
+
+        apiService.defaults.headers.common.Authorization = `Bearer ${accessToken}`;
+        originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+
+        console.log("[API] ✅ Token renovado com sucesso");
+        processQueue(null, accessToken);
+        return apiService(originalRequest);
+      } catch (err) {
+        console.error("[API] ❌ Falha ao renovar token", err);
+        processQueue(err);
+        // Se falhar a renovação, faz logout
+        await tokenStorage.clearTokens();
+        // Redireciona para login (pode ser implementado via context/event)
+        return Promise.reject(err);
+      }
+    }
+
     if (error.response) {
       const errorData = error.response.data as any;
       console.error(

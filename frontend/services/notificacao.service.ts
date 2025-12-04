@@ -330,6 +330,7 @@ class NotificationService {
 
   /**
    * Verifica o estoque e emite alerta se necessário (Chamado pela UI ou Background)
+   * ⚠️ APENAS NOTIFICA PARA O TIPO SANGUÍNEO DO USUÁRIO (evita saturação)
    */
   async checkBloodStockAndAlert(userBloodType: string): Promise<void> {
     try {
@@ -337,16 +338,7 @@ class NotificationService {
       // Isso garante o parse correto dos dados e evita erro de tipagem
       const bloodStock = await bancoDeSangueService.getBloodStock();
 
-      // Verifica TODOS os tipos sanguíneos críticos (alerta geral)
-      for (const stock of bloodStock) {
-        if (stock.status === "Crítico") {
-          await this.scheduleBloodStockNotificationGeneral(stock.tipo, "critical");
-        } else if (stock.status === "Alerta") {
-          await this.scheduleBloodStockNotificationGeneral(stock.tipo, "alert");
-        }
-      }
-
-      // Verifica especificamente o tipo do usuário (alerta personalizado com prioridade maior)
+      // 🔴 APENAS VERIFICA E NOTIFICA O TIPO SANGUÍNEO DO USUÁRIO
       const userBloodStock = bloodStock.find(
         (stock) => stock.tipo === userBloodType
       );
@@ -355,8 +347,12 @@ class NotificationService {
         // Verifica as strings retornadas pelo serviço (que normalizou para "Crítico" com acento)
         if (userBloodStock.status === "Crítico") {
           await this.scheduleBloodStockNotificationUser(userBloodType, "critical");
+          console.log(`🚨 [NOTIF] Alerta CRÍTICO para ${userBloodType}`);
         } else if (userBloodStock.status === "Alerta") {
           await this.scheduleBloodStockNotificationUser(userBloodType, "alert");
+          console.log(`⚠️ [NOTIF] Alerta para ${userBloodType}`);
+        } else {
+          console.log(`✅ [NOTIF] Estoque de ${userBloodType} normal - nenhuma notificação enviada`);
         }
       }
     } catch (error) {

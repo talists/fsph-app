@@ -34,28 +34,28 @@ function RootLayoutNav() {
   const router = useRouter();
   const colorScheme = useColorScheme();
 
-  // Inicializa o serviço de notificações - TEMPORARIAMENTE DESABILITADO
-  // useEffect(() => {
-  //   const initNotifications = async () => {
-  //     try {
-  //       await notificationService.initialize();
-  //       console.log("✅ Serviço de notificações inicializado");
+  // Inicializa o serviço de notificações
+  useEffect(() => {
+    const initNotifications = async () => {
+      try {
+        await notificationService.initialize();
+        console.log("✅ Serviço de notificações inicializado");
 
-  //       // Envia uma notificação de campanha mockada aleatoriamente (1x por dia)
-  //       const lastCampaignNotif = await AsyncStorage.getItem("lastCampaignNotif");
-  //       const today = new Date().toDateString();
+        // Envia uma notificação de campanha mockada aleatoriamente (1x por dia)
+        const lastCampaignNotif = await AsyncStorage.getItem("lastCampaignNotif");
+        const today = new Date().toDateString();
 
-  //       if (lastCampaignNotif !== today && Math.random() > 0.7) {
-  //         await notificationService.sendMockCampaignNotifications();
-  //         await AsyncStorage.setItem("lastCampaignNotif", today);
-  //       }
-  //     } catch (error) {
-  //       console.error("Erro ao inicializar notificações:", error);
-  //     }
-  //   };
+        if (lastCampaignNotif !== today && Math.random() > 0.7) {
+          await notificationService.sendMockCampaignNotifications();
+          await AsyncStorage.setItem("lastCampaignNotif", today);
+        }
+      } catch (error) {
+        console.error("Erro ao inicializar notificações:", error);
+      }
+    };
 
-  //   initNotifications();
-  // }, []);
+    initNotifications();
+  }, []);
 
   useEffect(() => {
     console.log(

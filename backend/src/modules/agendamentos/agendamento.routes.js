@@ -16,6 +16,7 @@ router.delete("/:id", verifyToken, AgendamentoController.remove);
 // FSPH (espelhando endpoints)
 router.get("/apiagendamento/doador/getinfo/:cpf", verifyToken, AgendamentoController.getInfoDoadorFSPH);
 router.get("/apiagendamento/doador/agendamentos/:cpf", verifyToken, AgendamentoController.getAgendamentosFSPH);
+router.post("/apiagendamento/limpar-cache/:cpf", verifyToken, AgendamentoController.limparCacheAgendamentos);
 
 router.get("/apiagendamento/cidades/:perm_individual/:perm_medula/:perm_campanha", verifyToken, AgendamentoController.listarCidades);
 router.get("/apiagendamento/local/:id_cidade/:perm_individual/:perm_medula/:perm_campanha", verifyToken, AgendamentoController.listarLocais);

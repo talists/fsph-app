@@ -155,4 +155,17 @@ export const AgendamentoController = {
       res.status(400).json({ msg: err.message });
     }
   },
+
+  limparCacheAgendamentos: async (req, res) => {
+    try {
+      const cpf = req.params.cpf || req.body.cpf;
+      if (!cpf) {
+        return res.status(400).json({ msg: "CPF não fornecido" });
+      }
+      const result = await AgendamentoService.limparCacheAgendamentos(cpf);
+      res.json(result);
+    } catch (err) {
+      res.status(400).json({ msg: err.message });
+    }
+  },
 };

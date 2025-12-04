@@ -886,7 +886,10 @@ export default function DoarScreen() {
         doador_cpf: getCleanCPF(formData.doador_cpf),
         doador_telefone: getCleanPhone(formData.doador_telefone),
         doador_sexo: formData.doador_sexo,
-        tipo: agendamentoType as HEMOSE.TipoAgendamento,
+        // Por padrão enviamos 'D' quando for campanha para compatibilidade com a API HEMOSE,
+        // que exige tipo 'D' ou 'M' no endpoint de marcação. Isso evita o erro que diz
+        // que o tipo deve ser exclusivamente D ou M.
+        tipo: (agendamentoType === "C" ? "D" : agendamentoType) as HEMOSE.TipoAgendamento,
         id_bloco_doacao: formData.id_bloco_doacao,
         data_agendamento: selectedDate ? new Date(selectedDate).toISOString() : new Date().toISOString(),
         pre_primeira_vez: preTriagem.primeiraVez,
@@ -906,15 +909,62 @@ export default function DoarScreen() {
           campaignForm.organizador_telefone
         );
         payload.quantidade_doadores = campaignForm.quantidade_doadores;
+        // A API HEMOSE espera também campos do doador mesmo para Campanha.
+        // Copiamos os dados do organizador para os campos doador_* quando
+        // o agendamento for do tipo Campanha, garantindo que os campos
+        // obrigatórios sejam enviados.
+        payload.doador_nome = payload.doador_nome || campaignForm.organizador_nome;
+        payload.doador_dt_nascimento = payload.doador_dt_nascimento || campaignForm.organizador_dt_nascimento;
+        payload.doador_email = payload.doador_email || campaignForm.organizador_email;
+        payload.doador_cpf = payload.doador_cpf || getCleanCPF(campaignForm.organizador_cpf);
+        payload.doador_telefone = payload.doador_telefone || getCleanPhone(campaignForm.organizador_telefone);
+        // Se não houver sexo do doador, usar 'M' como fallback (pode ajustar conforme necessidade)
+        payload.doador_sexo = payload.doador_sexo || (campaignForm.organizador_sexo || "M");
       }
 
-      // CORRIGIDO: Usa HEMOSE.marcarAgendamento (que usa apiService por baixo)
-      const res = await HEMOSE.marcarAgendamento(payload);
+      // Log do payload para debug (remover em produção se necessário)
+      console.log("📤 [AGENDAMENTO] Payload enviado:", JSON.stringify(payload, null, 2));
 
-      setSystemUsed(res._source || "hemose");
-      closeAgendamentoModal();
-      setStep(0);
-      startConfirmationFlow(payload);
+      // Se for Campanha, salva localmente (o endpoint remoto não expõe campanhas)
+      if (agendamentoType === "C") {
+        const cpfLimpo = getCleanCPF(payload.doador_cpf || payload.organizador_cpf || "");
+        const protocoloLocal = `LOCAL-CAMP-${Date.now()}`;
+
+        // Monta objeto no formato compatível com o que esperamos ao listar
+        const localAg = {
+          protocolo: protocoloLocal,
+          dt_bloco: payload.data_agendamento || new Date().toISOString(),
+          min_hora: payload.min_hora || "09:00:00",
+          max_hora: payload.max_hora || "09:30:00",
+          hora: payload.hora || undefined,
+          tipo: "CAMPANHA",
+          local: campaignForm.local || "Campanha Local",
+          situacao: "CONFIRMADO",
+          // mantém alguns campos para diagnóstico
+          doador_nome: payload.doador_nome,
+          doador_cpf: payload.doador_cpf,
+        };
+
+        // Persiste localmente
+        await HEMOSE.saveLocalCampaignAgendamento(cpfLimpo, localAg);
+
+        // Atualiza sistema utilizado para confirmação (marca local)
+        setSystemUsed("local-campanha");
+        closeAgendamentoModal();
+        setStep(0);
+        startConfirmationFlow(payload);
+      } else {
+        // CORRIGIDO: Usa HEMOSE.marcarAgendamento (que usa apiService por baixo)
+        const res = await HEMOSE.marcarAgendamento(payload);
+
+        // Limpar cache de agendamentos após sucesso para forçar refresh
+        await HEMOSE.limparCacheAgendamentos(formData.doador_cpf);
+
+        setSystemUsed(res._source || "hemose");
+        closeAgendamentoModal();
+        setStep(0);
+        startConfirmationFlow(payload);
+      }
     } catch (e: any) {
       // Extrai a mensagem de erro da API HEMOSE
       const errorMsg = e.message || "Falha ao marcar agendamento";
@@ -2261,19 +2311,25 @@ export default function DoarScreen() {
                               // Busca datas disponíveis via API
                               try {
                                 // ID do posto sede é 1
+                                console.log("📅 [DATAS] Buscando datas disponíveis para HEMOSE sede");
                                 const datas = await HEMOSE.listarTodosOsDias(
                                   1,
                                   agendamentoType as HEMOSE.TipoAgendamento
                                 );
+                                console.log("✅ [DATAS]", (datas || []).length, "datas encontradas");
                                 const datasFormatadas = (datas || []).map(
                                   (d: string) => ({ data: d })
                                 );
                                 setBlocosDates(datasFormatadas);
-                              } catch (e) {
-                                Alert.alert(
-                                  "Aviso",
-                                  "Não foi possível carregar datas disponíveis."
-                                );
+                              } catch (e: any) {
+                                const errorMsg = e?.message || String(e);
+                                console.error("❌ Erro ao buscar datas:", errorMsg);
+                                if (errorMsg && errorMsg !== "Erro desconhecido") {
+                                  Alert.alert(
+                                    "Erro ao buscar datas",
+                                    errorMsg
+                                  );
+                                }
                               }
                             }}
                           >
@@ -2330,17 +2386,24 @@ export default function DoarScreen() {
                               onPress={async () => {
                                 setSelectedLocal(item);
                                 try {
+                                  const localId = item.id || item.cd_local || item.codigo;
+                                  console.log("📅 [DATAS] Buscando datas para local", localId);
                                   const res = await HEMOSE.listarTodosOsDias(
-                                    item.id || item.cd_local || item.codigo,
+                                    localId,
                                     agendamentoType as HEMOSE.TipoAgendamento
                                   );
+                                  console.log("✅ [DATAS]", (res || []).length, "datas encontradas para local", localId);
                                   // Formata para o objeto esperado { data: 'YYYY-MM-DD' }
                                   const datasFormatadas = (res || []).map(
                                     (d: string) => ({ data: d })
                                   );
                                   setBlocosDates(datasFormatadas);
-                                } catch (e) {
-                                  Alert.alert("Erro ao buscar datas");
+                                } catch (e: any) {
+                                  const errorMsg = e?.message || String(e);
+                                  console.error("❌ Erro ao buscar datas:", errorMsg);
+                                  if (errorMsg && errorMsg !== "Erro desconhecido") {
+                                    Alert.alert("Erro ao buscar datas", errorMsg);
+                                  }
                                 }
                               }}
                             >
@@ -2385,18 +2448,26 @@ export default function DoarScreen() {
                               selectedLocal?.cd_local ||
                               selectedLocal?.codigo;
                           // CORRIGIDO: Chama HEMOSE.listarHorariosPorDia
+                          console.log(`📅 [HORARIOS] Buscando horários para local ${localId} em ${dateStr}`);
                           const horarios = await HEMOSE.listarHorariosPorDia(
                             dateStr,
                             localId,
                             agendamentoType as HEMOSE.TipoAgendamento
                           );
+                          console.log(`✅ [HORARIOS] ${horarios?.length || 0} horários encontrados`);
                           setBlocosByDate(horarios || []);
-                        } catch (e) {
-                          console.error("Erro ao buscar horários:", e);
-                          Alert.alert(
-                            "Erro ao buscar horários",
-                            "Tente novamente ou escolha outra data."
-                          );
+                        } catch (e: any) {
+                          const errorMsg = e?.message || String(e) || "Erro desconhecido";
+                          console.error("❌ Erro ao buscar horários:", errorMsg);
+                          console.error("❌ Stack:", e?.stack);
+
+                          // Mostrar erro apenas se houver uma mensagem útil
+                          if (errorMsg && errorMsg !== "Erro desconhecido") {
+                            Alert.alert(
+                              "Erro ao buscar horários",
+                              errorMsg
+                            );
+                          }
                           setBlocosByDate([]);
                         } finally {
                           setLoadingHorarios(false);
@@ -2470,91 +2541,93 @@ export default function DoarScreen() {
                                 ))}
                             </View>
 
-                            {/* Horários disponíveis no bloco selecionado */}
+                            {/* Horários disponíveis no bloco selecionado (com FlatList dentro de View para evitar aninhamento no ScrollView) */}
                             {selectedBlocoHora && (
                               <View style={styles.horariosDoBloco}>
                                 <Text style={styles.horariosDosBlocoTitle}>
                                   Horários disponíveis às {selectedBlocoHora}
                                 </Text>
-                                <FlatList
-                                  data={
-                                    agruparHorariosPorBloco(blocosByDate)[
-                                    selectedBlocoHora
-                                    ]
-                                  }
-                                  keyExtractor={(item: any, idx: number) =>
-                                    String(
-                                      item.id_bloco_doacao ||
-                                      item.id ||
-                                      item.cd_bloco ||
-                                      idx
-                                    )
-                                  }
-                                  numColumns={2}
-                                  renderItem={({ item }) => {
-                                    const isSelected =
-                                      selectedHorario?.id_bloco_doacao ===
-                                      item.id_bloco_doacao;
-                                    return (
-                                      <TouchableOpacity
-                                        style={[
-                                          styles.horarioButton,
-                                          isSelected
-                                            ? styles.horarioButtonSelected
-                                            : null,
-                                        ]}
-                                        onPress={() => {
-                                          setSelectedHorario(item);
-                                          setFormData({
-                                            ...formData,
-                                            id_bloco_doacao:
-                                              item.id_bloco_doacao ||
-                                              item.id ||
-                                              item.cd_bloco ||
-                                              item.id_bloco,
-                                          });
-                                        }}
-                                      >
-                                        <View
-                                          style={{
-                                            flexDirection: "row",
-                                            alignItems: "center",
-                                            justifyContent: "center",
+                                <View style={{ height: 200 }}>
+                                  <FlatList
+                                    scrollEnabled={true}
+                                    data={
+                                      agruparHorariosPorBloco(blocosByDate)[
+                                      selectedBlocoHora
+                                      ]
+                                    }
+                                    keyExtractor={(item: any, idx: number) =>
+                                      String(
+                                        item.id_bloco_doacao ||
+                                        item.id ||
+                                        item.cd_bloco ||
+                                        idx
+                                      )
+                                    }
+                                    numColumns={2}
+                                    renderItem={({ item }) => {
+                                      const isSelected =
+                                        selectedHorario?.id_bloco_doacao ===
+                                        item.id_bloco_doacao;
+                                      return (
+                                        <TouchableOpacity
+                                          style={[
+                                            styles.horarioButton,
+                                            isSelected
+                                              ? styles.horarioButtonSelected
+                                              : null,
+                                          ]}
+                                          onPress={() => {
+                                            setSelectedHorario(item);
+                                            setFormData({
+                                              ...formData,
+                                              id_bloco_doacao:
+                                                item.id_bloco_doacao ||
+                                                item.id ||
+                                                item.cd_bloco ||
+                                                item.id_bloco,
+                                            });
                                           }}
                                         >
-                                          <Ionicons
-                                            name="time-outline"
-                                            size={16}
-                                            color={isSelected ? "#fff" : RED}
-                                          />
-                                          <Text
-                                            style={[
-                                              styles.horarioButtonText,
-                                              isSelected ? { color: "#fff" } : null,
-                                            ]}
-                                          >
-                                            {item.hora ||
-                                              `${item.hora_inicio} - ${item.hora_fim}` ||
-                                              "Horário não informado"}
-                                          </Text>
-                                        </View>
-                                        {isSelected && (
-                                          <Ionicons
-                                            name="checkmark-circle"
-                                            size={16}
-                                            color="#fff"
+                                          <View
                                             style={{
-                                              position: "absolute",
-                                              top: 8,
-                                              right: 8,
+                                              flexDirection: "row",
+                                              alignItems: "center",
+                                              justifyContent: "center",
                                             }}
-                                          />
-                                        )}
-                                      </TouchableOpacity>
-                                    );
-                                  }}
-                                  style={{ marginTop: 8 }}
-                                />
+                                          >
+                                            <Ionicons
+                                              name="time-outline"
+                                              size={16}
+                                              color={isSelected ? "#fff" : RED}
+                                            />
+                                            <Text
+                                              style={[
+                                                styles.horarioButtonText,
+                                                isSelected ? { color: "#fff" } : null,
+                                              ]}
+                                            >
+                                              {item.hora ||
+                                                `${item.min_hora?.slice(0, 5)} - ${item.max_hora?.slice(0, 5)}` ||
+                                                "Horário não informado"}
+                                            </Text>
+                                          </View>
+                                          {isSelected && (
+                                            <Ionicons
+                                              name="checkmark-circle"
+                                              size={16}
+                                              color="#fff"
+                                              style={{
+                                                position: "absolute",
+                                                top: 8,
+                                                right: 8,
+                                              }}
+                                            />
+                                          )}
+                                        </TouchableOpacity>
+                                      );
+                                    }}
+                                  />
+                                </View>
                               </View>
                             )}
                           </View>

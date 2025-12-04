@@ -150,4 +150,18 @@ export class AgendamentoService {
       throw new Error(errorMsg);
     }
   }
+
+  static async limparCacheAgendamentos(cpf) {
+    try {
+      const cpfLimpo = cpf.replace(/\D/g, "");
+      const key = `fsph_agendamentos_${cpfLimpo}`;
+      console.log(`🗑️ [CACHE] Limpando cache para CPF ${cpfLimpo}`);
+      const deleted = await redisClient.del(key);
+      console.log(`✅ [CACHE] Cache ${deleted ? "deletado" : "não encontrado"} para CPF ${cpfLimpo}`);
+      return { msg: "Cache limpo com sucesso", deleted };
+    } catch (err) {
+      console.error("❌ Erro ao limpar cache:", err.message);
+      throw new Error(err.message);
+    }
+  }
 }

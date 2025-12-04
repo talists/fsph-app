@@ -1,5 +1,6 @@
 // services/hemose.ts
 import { apiService } from "./api";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export type TipoAgendamento = "D" | "M" | "C";
 
@@ -37,6 +38,70 @@ export async function desmarcarAgendamento(protocolo: string) {
     `/agendamentos/apiagendamento/agendamento/desmarcar/${protocolo}`
   );
   return data;
+}
+
+// Limpar cache de agendamentos (após marcar novo agendamento)
+export async function limparCacheAgendamentos(cpf: string) {
+  try {
+    const cpfLimpo = cpf.replace(/\D/g, "");
+    console.log("🗑️ [CACHE] Limpando cache de agendamentos para CPF", cpfLimpo);
+    const { data } = await apiService.post(
+      `/agendamentos/apiagendamento/limpar-cache/${cpfLimpo}`,
+      {}
+    );
+    console.log("✅ [CACHE] Cache limpo:", data);
+    return true;
+  } catch (e) {
+    console.error("❌ Erro ao limpar cache:", e);
+    return false;
+  }
+}
+
+// --- Local storage helpers for Campaign appointments ---
+const LOCAL_AGENDAMENTOS_KEY_PREFIX = "local_agendamentos_";
+
+export async function getLocalCampaignAgendamentos(cpf: string) {
+  try {
+    const cpfLimpo = String(cpf).replace(/\D/g, "");
+    const key = `${LOCAL_AGENDAMENTOS_KEY_PREFIX}${cpfLimpo}`;
+    const raw = await AsyncStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    console.error("❌ Erro ao ler agendamentos locais:", e);
+    return [];
+  }
+}
+
+export async function saveLocalCampaignAgendamento(cpf: string, ag: any) {
+  try {
+    const cpfLimpo = String(cpf).replace(/\D/g, "");
+    const key = `${LOCAL_AGENDAMENTOS_KEY_PREFIX}${cpfLimpo}`;
+    const current = await getLocalCampaignAgendamentos(cpfLimpo);
+    const updated = [ag, ...current];
+    await AsyncStorage.setItem(key, JSON.stringify(updated));
+    console.log("💾 [AGENDAMENTOS-LOCAL] Agendamento de campanha salvo local para CPF", cpfLimpo);
+    return true;
+  } catch (e) {
+    console.error("❌ Erro ao salvar agendamento local:", e);
+    return false;
+  }
+}
+
+export async function removeLocalCampaignAgendamento(cpf: string, protocolo: string) {
+  try {
+    const cpfLimpo = String(cpf).replace(/\D/g, "");
+    const key = `${LOCAL_AGENDAMENTOS_KEY_PREFIX}${cpfLimpo}`;
+    const current = await getLocalCampaignAgendamentos(cpfLimpo);
+    const filtered = current.filter((a: any) => a.protocolo !== protocolo);
+    await AsyncStorage.setItem(key, JSON.stringify(filtered));
+    console.log("🗑️ [AGENDAMENTOS-LOCAL] Agendamento local removido", protocolo);
+    return true;
+  } catch (e) {
+    console.error("❌ Erro ao remover agendamento local:", e);
+    return false;
+  }
 }
 
 // --- Fluxo de Agendamento (Via Backend) ---

@@ -4,7 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 export interface DonorCardProps {
   id?: string;
-  credential?: string; // NOVO: se não vier, usa id
+  credential?: string; // se não vier, usa id
   name?: string;
   bloodType?: string;
   profileImage?: string;
@@ -13,17 +13,25 @@ export interface DonorCardProps {
   cpf?: string;
   rg?: string;
   birthDate?: string;
-  gender?: 'M' | 'F'; // ADICIONADO: campo de gênero
-  fullscreen?: boolean; // mantido (não será usado p/ medir quando houver fixedSize)
+  gender?: "M" | "F";
+  fullscreen?: boolean;
   onPressShare?: () => void;
-  fixedSize?: { width: number; height: number }; // NOVO
-  isLandscape?: boolean; // NOVO: para modo paisagem
+  fixedSize?: { width: number; height: number };
+  // AGORA vamos usar esse isLandscape para deixar tudo maior/centralizado
+  isLandscape?: boolean;
 }
 
-const A_RATIO = 1000 / 600; // ~1.6667
+// Proporção de cartão (largura / altura)
+const CARD_RATIO = 1.6;
 
 const fmtDate = (v?: string) =>
-  v ? new Date(v).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" }) : "—";
+  v
+    ? new Date(v).toLocaleDateString("pt-BR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    })
+    : "—";
 
 const maskCPF = (v?: string) => {
   if (!v) return "000.000.000-00";
@@ -37,102 +45,62 @@ function DonorCardBase({
   name,
   bloodType,
   profileImage,
-  lastDonation,
-  donationCount,
   cpf,
-  rg,
   birthDate,
   gender,
   fixedSize,
-  isLandscape = false,
+  isLandscape,
 }: DonorCardProps) {
-  // medidas controladas EXTERNAMENTE quando fixedSize vier
-  let cardStyleSize: any = { aspectRatio: A_RATIO, width: "100%" };
+  // ===== TAMANHO DO CARTÃO (RESPONSIVO) =====
+  let cardStyleSize: { width: number; height: number };
+
   if (fixedSize) {
-    cardStyleSize = { width: fixedSize.width, height: fixedSize.height };
+    cardStyleSize = {
+      width: fixedSize.width,
+      height: fixedSize.height,
+    };
   } else {
-    // fallback proporcional à tela (sem depender do modal)
     const { width } = Dimensions.get("window");
-    const w = Math.min(width * 0.92, 380);
-    cardStyleSize = { width: w, aspectRatio: A_RATIO };
+    const cardWidth = Math.min(width * 0.9, 380);
+    const cardHeight = cardWidth / CARD_RATIO;
+
+    cardStyleSize = {
+      width: cardWidth,
+      height: cardHeight,
+    };
   }
 
-  const credText = (credential || id || "0000000").replace(/(.{4})/g, "$1 ").trim();
+  const credText = (credential || id || "0000000-00000")
+    .replace(/(\d{7})(\d{5})/, "$1 - $2")
+    .trim();
 
-  // Layout de cartão paisagem (horizontal como cartão de crédito)
-  if (isLandscape) {
-    return (
-      <View style={[styles.card, cardStyleSize, styles.landscapeCard]}>
-        {/* LADO ESQUERDO - Avatar e Info Principal */}
-        <View style={styles.landscapeLeft}>
-          <View style={styles.landscapeHeader}>
-            <Text style={styles.landscapeTitle}>CARTÃO DO DOADOR</Text>
-            <Text style={styles.landscapeSubtitle}>HEMOSE - Sergipe</Text>
-          </View>
+  const isBig = !!isLandscape; // quando estiver no “modo paisagem” lógico
 
-          <View style={styles.landscapeAvatarSection}>
-            <Image
-              source={{ uri: profileImage || "https://via.placeholder.com/120" }}
-              style={styles.landscapeAvatar}
-            />
-            <View style={styles.landscapeNameSection}>
-              <Text style={styles.landscapeName} numberOfLines={2}>
-                {name || "NOME DO DOADOR"}
-              </Text>
-              <Text style={styles.landscapeBloodType}>{bloodType || "AB+"}</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* LADO DIREITO - Informações Detalhadas */}
-        <View style={styles.landscapeRight}>
-          <View style={styles.landscapeInfoGrid}>
-            <View style={styles.landscapeInfoItem}>
-              <Text style={styles.landscapeLabel}>Data de Nascimento</Text>
-              <Text style={styles.landscapeValue}>{fmtDate(birthDate)}</Text>
-            </View>
-            <View style={styles.landscapeInfoItem}>
-              <Text style={styles.landscapeLabel}>Sexo</Text>
-              <Text style={styles.landscapeValue}>
-                {gender === 'M' ? 'Masculino' : gender === 'F' ? 'Feminino' : '—'}
-              </Text>
-            </View>
-            <View style={styles.landscapeInfoItem}>
-              <Text style={styles.landscapeLabel}>Credencial</Text>
-              <Text style={styles.landscapeValue}>{credText}</Text>
-            </View>
-            <View style={styles.landscapeInfoItem}>
-              <Text style={styles.landscapeLabel}>CPF</Text>
-              <Text style={styles.landscapeValue}>{maskCPF(cpf)}</Text>
-            </View>
-          </View>
-
-          {/* Decoração */}
-          <View style={styles.landscapeDecoration}>
-            <Ionicons name="water" size={16} color="rgba(255,255,255,0.1)" />
-          </View>
-        </View>
-      </View>
-    );
-  }
-
-  // Layout retrato padrão
-
+  // ============ ÚNICO LAYOUT (cartão físico horizontal) ============
   return (
     <View style={[styles.card, cardStyleSize]}>
       {/* HEADER */}
-      <View style={styles.header}>
-        <Text style={styles.cardTitle}>CARTÃO DO DOADOR DE SANGUE</Text>
-        <Text style={styles.institution}>HEMOSE - Sergipe</Text>
+      <View style={[styles.header, isBig && styles.headerLandscape]}>
+        <Text style={[styles.cardTitle, isBig && styles.cardTitleLg]}>
+          CARTÃO DO DOADOR DE SANGUE
+        </Text>
+        <Text style={[styles.institution, isBig && styles.institutionLg]}>
+          HEMOSE - Sergipe
+        </Text>
       </View>
 
       {/* MAIN CONTENT */}
-      <View style={styles.mainContent}>
+      <View
+        style={[
+          styles.mainContent,
+          isBig && styles.mainContentLandscape, // centraliza mais
+        ]}
+      >
         {/* AVATAR */}
         <View style={styles.avatarSection}>
           <Image
             source={{ uri: profileImage || "https://via.placeholder.com/120" }}
-            style={styles.avatar}
+            style={[styles.avatar, isBig && styles.avatarLg]}
           />
         </View>
 
@@ -140,29 +108,49 @@ function DonorCardBase({
         <View style={styles.infoSection}>
           {/* Nome Completo */}
           <View style={styles.fieldContainer}>
-            <Text style={styles.fieldLabel}>Nome Completo</Text>
-            <Text style={styles.fieldValue} numberOfLines={2}>
+            <Text style={[styles.fieldLabel, isBig && styles.fieldLabelLg]}>
+              Nome Completo
+            </Text>
+            <Text
+              style={[styles.fieldValue, isBig && styles.fieldValueLg]}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
               {name || "NOME DO DOADOR"}
             </Text>
           </View>
 
           {/* Data de Nascimento */}
           <View style={styles.fieldContainer}>
-            <Text style={styles.fieldLabel}>Data de Nascimento</Text>
-            <Text style={styles.fieldValue}>{fmtDate(birthDate)}</Text>
+            <Text style={[styles.fieldLabel, isBig && styles.fieldLabelLg]}>
+              Data de Nascimento
+            </Text>
+            <Text style={[styles.fieldValue, isBig && styles.fieldValueLg]}>
+              {fmtDate(birthDate)}
+            </Text>
           </View>
 
           {/* Grid inferior: Sexo, Tipo Sanguíneo */}
           <View style={styles.bottomGrid}>
             <View style={styles.gridItem}>
-              <Text style={styles.fieldLabel}>Sexo</Text>
-              <Text style={styles.fieldValue}>
-                {gender === 'M' ? 'Masculino' : gender === 'F' ? 'Feminino' : '—'}
+              <Text style={[styles.fieldLabel, isBig && styles.fieldLabelLg]}>
+                Sexo
+              </Text>
+              <Text style={[styles.fieldValue, isBig && styles.fieldValueLg]}>
+                {gender === "M"
+                  ? "Masculino"
+                  : gender === "F"
+                    ? "Feminino"
+                    : "—"}
               </Text>
             </View>
-            <View style={styles.gridItem}>
-              <Text style={styles.fieldLabel}>Tipo Sanguíneo</Text>
-              <Text style={styles.bloodType}>{bloodType || "AB+"}</Text>
+            <View style={[styles.gridItem, { marginRight: 0 }]}>
+              <Text style={[styles.fieldLabel, isBig && styles.fieldLabelLg]}>
+                Tipo Sanguíneo
+              </Text>
+              <Text style={[styles.bloodType, isBig && styles.bloodTypeLg]}>
+                {bloodType || "AB+"}
+              </Text>
             </View>
           </View>
         </View>
@@ -170,13 +158,40 @@ function DonorCardBase({
 
       {/* FOOTER */}
       <View style={styles.footer}>
-        <View style={styles.footerItem}>
-          <Text style={styles.footerLabel}>Credencial</Text>
-          <Text style={styles.footerValue}>{credText}</Text>
+        {/* Credencial – centralizada */}
+        <View style={styles.footerItemLeft}>
+          <Text
+            style={[
+              styles.footerLabelCentered,
+              isBig && styles.footerLabelLg,
+            ]}
+          >
+            Credencial
+          </Text>
+          <Text
+            style={[
+              styles.footerValueCentered,
+              isBig && styles.footerValueLg,
+            ]}
+          >
+            {credText}
+          </Text>
         </View>
-        <View style={styles.footerItem}>
-          <Text style={styles.footerLabel}>CPF</Text>
-          <Text style={styles.footerValue}>{maskCPF(cpf)}</Text>
+
+        {/* CPF – alinhado à direita */}
+        <View style={styles.footerItemRight}>
+          <Text
+            style={[styles.footerLabelRight, isBig && styles.footerLabelLg]}
+          >
+            CPF
+          </Text>
+          <Text
+            style={[styles.footerValueRight, isBig && styles.footerValueLg]}
+            numberOfLines={1}
+            ellipsizeMode="head"
+          >
+            {maskCPF(cpf)}
+          </Text>
         </View>
       </View>
 
@@ -206,44 +221,64 @@ const styles = StyleSheet.create({
   /* HEADER */
   header: {
     backgroundColor: "#3D4F4C",
-    paddingVertical: 12,
-    paddingHorizontal: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
     alignItems: "center",
+  },
+  headerLandscape: {
+    paddingVertical: 10,
   },
   cardTitle: {
     color: "#FFFFFF",
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "800",
-    letterSpacing: 1,
+    letterSpacing: 0.8,
     textAlign: "center",
+  },
+  cardTitleLg: {
+    fontSize: 14,
+    letterSpacing: 1,
   },
   institution: {
     color: "#C9D8D5",
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "600",
     marginTop: 2,
     textAlign: "center",
+  },
+  institutionLg: {
+    fontSize: 10,
   },
 
   /* MAIN CONTENT */
   mainContent: {
     flex: 1,
     backgroundColor: "#2A3C39",
-    padding: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     flexDirection: "row",
+    alignItems: "flex-start",
+  },
+  mainContentLandscape: {
+    paddingHorizontal: 24,
+    paddingVertical: 14,
     alignItems: "center",
   },
 
   /* AVATAR */
   avatarSection: {
-    marginRight: 20,
+    marginRight: 14,
     alignItems: "center",
   },
   avatar: {
-    width: 90,
-    height: 90,
+    width: 76,
+    height: 76,
     borderRadius: 12,
     backgroundColor: "#F3F4F6",
+  },
+  avatarLg: {
+    width: 90,
+    height: 90,
   },
 
   /* INFORMAÇÕES */
@@ -251,153 +286,106 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   fieldContainer: {
-    marginBottom: 16,
+    marginBottom: 8,
   },
   fieldLabel: {
     color: "#C9D8D5",
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "700",
-    letterSpacing: 0.5,
-    marginBottom: 4,
+    letterSpacing: 0.4,
+    marginBottom: 3,
+  },
+  fieldLabelLg: {
+    fontSize: 10,
   },
   fieldValue: {
     color: "#FFFFFF",
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "700",
+    lineHeight: 16,
+  },
+  fieldValueLg: {
+    fontSize: 14.5,
     lineHeight: 18,
   },
 
   /* GRID INFERIOR */
   bottomGrid: {
     flexDirection: "row",
-    marginTop: 4,
+    marginTop: 2,
   },
   gridItem: {
     flex: 1,
-    marginRight: 16,
+    marginRight: 10,
   },
   bloodType: {
     color: "#E73645",
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "800",
+  },
+  bloodTypeLg: {
+    fontSize: 18,
   },
 
   /* FOOTER */
   footer: {
     backgroundColor: "#3D4F4C",
-    paddingVertical: 12,
-    paddingHorizontal: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
     flexDirection: "row",
-    justifyContent: "space-between",
   },
-  footerItem: {
+  footerItemLeft: {
+    flex: 1,
     alignItems: "center",
+    justifyContent: "center",
   },
-  footerLabel: {
+  footerLabelCentered: {
     color: "#C9D8D5",
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "700",
-    letterSpacing: 0.5,
-    marginBottom: 4,
+    letterSpacing: 0.4,
+    marginBottom: 2,
+    textAlign: "center",
   },
-  footerValue: {
+  footerValueCentered: {
     color: "#FFFFFF",
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "800",
-    letterSpacing: 1,
+    letterSpacing: 0.8,
+    textAlign: "center",
+  },
+  footerItemRight: {
+    flex: 1,
+    alignItems: "flex-end",
+    justifyContent: "center",
+  },
+  footerLabelRight: {
+    color: "#C9D8D5",
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+    marginBottom: 2,
+    textAlign: "right",
+  },
+  footerValueRight: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+    textAlign: "right",
+  },
+  footerLabelLg: {
+    fontSize: 10,
+  },
+  footerValueLg: {
+    fontSize: 12,
   },
 
   /* DECORAÇÃO */
   decoration: {
     position: "absolute",
-    bottom: 20,
-    right: 20,
+    bottom: 10,
+    right: 10,
     opacity: 0.3,
-  },
-
-  /* ESTILOS PARA MODO PAISAGEM (cartão horizontal) */
-  landscapeCard: {
-    flexDirection: "row",
-    aspectRatio: 1.586, // Proporção de cartão de crédito
-  },
-  landscapeLeft: {
-    flex: 1,
-    backgroundColor: "#2A3C39",
-    padding: 20,
-    justifyContent: "space-between",
-  },
-  landscapeRight: {
-    flex: 1,
-    backgroundColor: "#3D4F4C",
-    padding: 16,
-    justifyContent: "space-between",
-    position: "relative",
-  },
-  landscapeHeader: {
-    marginBottom: 12,
-  },
-  landscapeTitle: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 1,
-  },
-  landscapeSubtitle: {
-    color: "#C9D8D5",
-    fontSize: 9,
-    fontWeight: "600",
-    marginTop: 2,
-  },
-  landscapeAvatarSection: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 8,
-  },
-  landscapeAvatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 12,
-    backgroundColor: "#F3F4F6",
-    marginRight: 16,
-  },
-  landscapeNameSection: {
-    flex: 1,
-  },
-  landscapeName: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "800",
-    lineHeight: 16,
-    marginBottom: 4,
-  },
-  landscapeBloodType: {
-    color: "#E73645",
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  landscapeInfoGrid: {
-    flex: 1,
-    justifyContent: "space-around",
-  },
-  landscapeInfoItem: {
-    marginBottom: 8,
-  },
-  landscapeLabel: {
-    color: "#C9D8D5",
-    fontSize: 8,
-    fontWeight: "700",
-    letterSpacing: 0.5,
-    marginBottom: 2,
-  },
-  landscapeValue: {
-    color: "#FFFFFF",
-    fontSize: 10,
-    fontWeight: "700",
-  },
-  landscapeDecoration: {
-    position: "absolute",
-    bottom: 12,
-    right: 12,
-    opacity: 0.2,
   },
 });

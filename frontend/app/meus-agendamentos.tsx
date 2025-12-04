@@ -61,15 +61,26 @@ export default function MeusAgendamentos() {
             // A API retorna um objeto com { status, data: [...], msg, err }
             const agendamentosArray = Array.isArray(response) ? response : (response?.data || []);
 
+            // Busca agendamentos de campanha salvos localmente e mescla
+            const localAgs = await HEMOSE.getLocalCampaignAgendamentos(cpfLimpo);
+            console.log("💾 [AGENDAMENTOS-LOCAL] Agendamentos locais encontrados:", localAgs.length);
+
             // Mapear os campos da API para o formato esperado
-            const agendamentosMapeados = agendamentosArray.map((ag: any) => ({
+            const mapFromApi = (ag: any) => ({
                 protocolo: ag.protocolo || "N/A",
-                data: formatarData(ag.dt_bloco),
-                hora: formatarHorario(ag.min_hora, ag.max_hora),
+                data: formatarData(ag.dt_bloco || ag.data_agendamento || ag.data),
+                hora: ag.hora || formatarHorario(ag.min_hora, ag.max_hora),
                 tipo: ag.tipo || "D",
                 local: ag.local || "HEMOSE",
-                status: ag.situacao || "Marcado"
-            }));
+                status: ag.situacao || ag.status || "Marcado"
+            });
+
+            const agendamentosMapeados = [
+                // Primeiro os agendamentos da API
+                ...(Array.isArray(agendamentosArray) ? agendamentosArray.map(mapFromApi) : []),
+                // Depois os agendamentos locais (campanhas)
+                ...(Array.isArray(localAgs) ? localAgs.map(mapFromApi) : []),
+            ];
 
             setAgendamentos(agendamentosMapeados);
             console.log("✅ [AGENDAMENTOS] Total carregado:", agendamentosMapeados.length);
@@ -104,9 +115,20 @@ export default function MeusAgendamentos() {
                     style: "destructive",
                     onPress: async () => {
                         try {
-                            await HEMOSE.desmarcarAgendamento(protocolo);
-                            Alert.alert("Sucesso", "Agendamento cancelado com sucesso!");
-                            carregarAgendamentos(); // Recarrega a lista
+                            if (String(protocolo).startsWith("LOCAL-CAMP-")) {
+                                // Agendamento local salvo pelo app (campanha)
+                                if (!user?.cpf) {
+                                    Alert.alert("Erro", "CPF do usuário não disponível para cancelar agendamento local.");
+                                    return;
+                                }
+                                await HEMOSE.removeLocalCampaignAgendamento(user.cpf, protocolo);
+                                Alert.alert("Sucesso", "Agendamento de campanha cancelado.");
+                                carregarAgendamentos();
+                            } else {
+                                await HEMOSE.desmarcarAgendamento(protocolo);
+                                Alert.alert("Sucesso", "Agendamento cancelado com sucesso!");
+                                carregarAgendamentos(); // Recarrega a lista
+                            }
                         } catch (error: any) {
                             Alert.alert(
                                 "Erro",

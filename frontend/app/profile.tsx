@@ -25,6 +25,7 @@ import { authService } from "../services/auth.service";
 import { apiService } from "../services/api";
 import DonorCardModal from "@/components/DonorCardModal";
 import DonationHistory from "@/components/DonationHistory";
+import * as HEMOSE from "../services/agendamento.service";
 
 // Configurar comportamento das notificações
 Notifications.setNotificationHandler({
@@ -134,6 +135,41 @@ export default function ProfileScreen() {
     loadProfile();
   }, []);
 
+  // Estado para verificar se existe agendamento marcado
+  const [hasScheduled, setHasScheduled] = useState(false);
+  const [upcomingAgendamento, setUpcomingAgendamento] = useState<any | null>(null);
+
+  const loadAgendamentosUsuario = async (cpfRaw?: string) => {
+    try {
+      const cpf = cpfRaw || profile?.cpf;
+      if (!cpf) return;
+      const cpfLimpo = String(cpf).replace(/\D/g, "");
+      const res = await HEMOSE.getAgendamentosByCPF(cpfLimpo);
+      const apiAgs = Array.isArray(res) ? res : (res?.data || []);
+      const localAgs = await HEMOSE.getLocalCampaignAgendamentos(cpfLimpo);
+      const ags = [...(Array.isArray(apiAgs) ? apiAgs : []), ...(Array.isArray(localAgs) ? localAgs : [])];
+      // Filtra agendamentos futuros/ativos
+      const hoje = new Date();
+      const futuros = ags.filter((a: any) => {
+        const dt = a.dt_bloco || a.data_agendamento || a.date || a.dt || null;
+        if (!dt) return false;
+        const d = new Date(dt);
+        const situacao = (a.situacao || a.status || "").toLowerCase();
+        // considera agendamentos não cancelados e com data >= hoje
+        return d >= new Date(hoje.toDateString()) && !situacao.includes("cancel");
+      });
+      if (futuros.length > 0) {
+        setHasScheduled(true);
+        setUpcomingAgendamento(futuros[0]);
+      } else {
+        setHasScheduled(false);
+        setUpcomingAgendamento(null);
+      }
+    } catch (err) {
+      console.error("❌ Erro ao carregar agendamentos no perfil:", err);
+    }
+  };
+
   // Salvar configurações quando mudarem
   useEffect(() => {
     saveSettings();
@@ -188,6 +224,8 @@ export default function ProfileScreen() {
 
       setProfile(realProfile);
       await loadSettings();
+      // Carrega agendamentos do usuário (para indicar se há agendamento marcado)
+      await loadAgendamentosUsuario(realProfile.cpf);
     } catch (error) {
       console.error("Error loading profile:", error);
       Alert.alert("Erro", "Não foi possível carregar o perfil atualizado");
@@ -614,9 +652,7 @@ export default function ProfileScreen() {
                   { color: donationStatus.canDonate ? "#10B981" : "#F59E0B" },
                 ]}
               >
-                {donationStatus.canDonate
-                  ? "Apto para Doar"
-                  : "Não Apto para Doar"}
+                {donationStatus.canDonate ? "Apto para Doar" : "Não pode doar"}
               </Text>
             </View>
 
@@ -644,16 +680,12 @@ export default function ProfileScreen() {
               )}
 
               <View style={styles.statItem}>
-                <Text style={styles.statValue}>
-                  {profile.gender === "F" ? "90" : "60"} dias
-                </Text>
-                <Text style={styles.statLabel}>
-                  Intervalo {profile.gender === "F" ? "♀" : "♂"}
-                </Text>
+                <Text style={styles.statValue}>{profile.gender === "F" ? "90" : "60"} dias</Text>
+                <Text style={styles.statLabel}>Intervalo {profile.gender === "F" ? "♀" : "♂"}</Text>
               </View>
             </View>
 
-            {/* Countdown for next donation */}
+            {/* Countdown for next donation (if not eligible) */}
             {!donationStatus.canDonate && donationStatus.daysUntilNext > 0 && (
               <View style={styles.countdownContainer}>
                 <View style={styles.countdownHeader}>
@@ -663,19 +695,13 @@ export default function ProfileScreen() {
 
                 <View style={styles.countdownDisplay}>
                   <View style={styles.countdownItem}>
-                    <Text style={styles.countdownNumber}>
-                      {donationStatus.daysUntilNext}
-                    </Text>
-                    <Text style={styles.countdownLabel}>
-                      {donationStatus.daysUntilNext === 1 ? "dia" : "dias"}
-                    </Text>
+                    <Text style={styles.countdownNumber}>{donationStatus.daysUntilNext}</Text>
+                    <Text style={styles.countdownLabel}>{donationStatus.daysUntilNext === 1 ? "dia" : "dias"}</Text>
                   </View>
 
                   {donationStatus.daysUntilNext <= 7 && (
                     <View style={styles.countdownItem}>
-                      <Text style={styles.countdownNumber}>
-                        {Math.ceil(donationStatus.daysUntilNext * 24) % 24}
-                      </Text>
+                      <Text style={styles.countdownNumber}>{Math.ceil(donationStatus.daysUntilNext * 24) % 24}</Text>
                       <Text style={styles.countdownLabel}>horas</Text>
                     </View>
                   )}
@@ -683,27 +709,30 @@ export default function ProfileScreen() {
 
                 {donationStatus.daysUntilNext <= 30 && (
                   <View style={styles.reminderContainer}>
-                    <Ionicons
-                      name="notifications-outline"
-                      size={14}
-                      color="#F59E0B"
-                    />
+                    <Ionicons name="notifications-outline" size={14} color="#F59E0B" />
                     <Text style={styles.reminderText}>
-                      {donationStatus.daysUntilNext <= 7
-                        ? "Você pode doar em breve! Prepare-se."
-                        : "Ativar lembrete para próxima doação?"}
+                      {donationStatus.daysUntilNext <= 7 ? "Você pode doar em breve! Prepare-se." : "Ativar lembrete para próxima doação?"}
                     </Text>
                   </View>
                 )}
               </View>
             )}
 
-            {donationStatus.canDonate && (
+            {/* Messages depending on scheduled donation or eligibility */}
+            {hasScheduled ? (
+              <View style={styles.readyToDonateContainer}>
+                <Ionicons name="calendar" size={20} color="#10B981" />
+                <Text style={styles.readyToDonateText}>Você está apto a doar! Doação Agendada</Text>
+              </View>
+            ) : donationStatus.canDonate ? (
               <View style={styles.readyToDonateContainer}>
                 <Ionicons name="heart" size={20} color="#10B981" />
-                <Text style={styles.readyToDonateText}>
-                  Você está apto a doar! Agende sua próxima doação.
-                </Text>
+                <Text style={styles.readyToDonateText}>Você está apto a doar! Agende sua próxima doação.</Text>
+              </View>
+            ) : (
+              <View style={styles.notEligibleContainer}>
+                <Ionicons name="alert-circle" size={20} color="#F59E0B" />
+                <Text style={[styles.readyToDonateText, { color: '#F59E0B' }]}>Tempo de pausa. Aguarde a próxima Doação</Text>
               </View>
             )}
           </View>
@@ -2647,6 +2676,18 @@ const styles = StyleSheet.create({
     color: "#10B981",
     fontWeight: "600",
     textAlign: "center",
+  },
+  notEligibleContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#FFFBEB",
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: "#FDE68A",
   },
 
   // Estilos do Atestado de Doação

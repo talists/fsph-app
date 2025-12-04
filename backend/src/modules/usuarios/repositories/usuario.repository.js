@@ -7,6 +7,7 @@ import { In, Not, IsNull, Brackets } from "typeorm";
 const repo = AppDataSource.getRepository(Usuario);
 
 export class UsuarioRepository {
+
   static async findAll() {
     return await repo.find();
   }

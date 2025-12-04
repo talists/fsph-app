@@ -27,6 +27,12 @@ router.post(
 
 router.get("/", verifyToken, UsuarioController.getAll);
 router.get("/meu-perfil", verifyToken, UsuarioController.getMeuPerfil);
+
+// ⚠️ IMPORTANTE: Rotas específicas ANTES de rotas com parâmetro dinâmico /:id
+router.patch("/fcm-token", verifyToken, UsuarioController.atualizarFcmToken);
+router.patch("/meu-perfil", verifyToken, upload.single("url_foto_perfil"), validateBody(updateUsuarioSchema), UsuarioController.updateMeuPerfil);
+router.post("/meu-perfil/foto", verifyToken, upload.single("file"), UsuarioController.uploadFotoPerfil);
+
 router.get("/:id", verifyToken, UsuarioController.getById);
 
 // 4. Usa o 'validateBody' também para a atualização
@@ -39,8 +45,5 @@ router.patch(
 );
 
 router.delete("/:id", verifyToken, UsuarioController.delete);
-
-// 5. Rota de FCM token (correta)
-router.patch("/fcm-token", verifyToken, UsuarioController.atualizarFcmToken);
 
 export default router;

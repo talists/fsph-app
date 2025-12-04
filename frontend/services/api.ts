@@ -85,7 +85,10 @@ apiService.interceptors.response.use(
         // Tenta renovar o token
         const refreshToken = await tokenStorage.getRefreshToken();
         if (!refreshToken) {
-          throw new Error("Sem refresh token");
+          console.warn("[API] ⚠️ Sem refresh token - limpando tokens e redirecionando para login");
+          await tokenStorage.clearTokens();
+          processQueue(new Error("Sem refresh token"), null);
+          return Promise.reject(new Error("Sessão expirada. Faça login novamente."));
         }
 
         console.log("[API] 🔄 Tentando renovar token...");

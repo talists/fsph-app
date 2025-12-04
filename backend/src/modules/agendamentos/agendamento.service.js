@@ -77,14 +77,39 @@ export class AgendamentoService {
     const cached = await redisClient.get(key);
     if (cached) {
       console.log(`🔍 [AGENDAMENTOS] Cache encontrado para CPF ${cpf}`);
-      console.log(`📦 [AGENDAMENTOS] Dados do cache:`, JSON.stringify(JSON.parse(cached), null, 2));
-      return JSON.parse(cached);
+      const parsedCache = JSON.parse(cached);
+      console.log(`📦 [AGENDAMENTOS] Retornando do cache: ${parsedCache?.length || 0} agendamentos`);
+      return parsedCache;
     }
     console.log(`🔍 [AGENDAMENTOS] Buscando na API HEMOSE para CPF ${cpf}...`);
-    const data = await ExternalAgendamentoRepository.getAgendamentosDoador(cpf);
-    console.log(`📦 [AGENDAMENTOS] Dados recebidos da HEMOSE:`, JSON.stringify(data, null, 2));
-    await redisClient.set(key, JSON.stringify(data), "EX", 3600);
-    return data;
+    try {
+      const data = await ExternalAgendamentoRepository.getAgendamentosDoador(cpf);
+      console.log(`📦 [AGENDAMENTOS] Sucesso! Dados recebidos da HEMOSE: ${Array.isArray(data) ? data.length : 0} agendamentos`);
+      // Cache o resultado mesmo se for array vazio
+      await redisClient.set(key, JSON.stringify(data || []), "EX", 3600);
+      return data || [];
+    } catch (error) {
+      // Log detalhado do erro
+      console.error(`❌ [AGENDAMENTOS] Erro ao buscar CPF ${cpf}:`);
+      console.error(`   - Status: ${error?.response?.status}`);
+      console.error(`   - Message: ${error?.message}`);
+      console.error(`   - Full Error:`, error);
+
+      // Verifica se é erro 400 (CPF sem agendamentos - normal para usuários novos)
+      const statusCode = error?.response?.status;
+      const isNotFoundError = statusCode === 400;
+
+      if (isNotFoundError) {
+        console.log(`ℹ️ [AGENDAMENTOS] CPF sem agendamentos (400): ${cpf}`);
+        const emptyData = [];
+        await redisClient.set(key, JSON.stringify(emptyData), "EX", 3600);
+        return emptyData;
+      }
+
+      // Se for outro erro, lança para o controller tratar como 500
+      console.error(`❌ [AGENDAMENTOS] Erro não é 400, relançando para controller`);
+      throw error;
+    }
   }
 
   static async listarCidades(perm_individual, perm_medula, perm_campanha) {

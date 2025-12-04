@@ -144,10 +144,32 @@ export default function ProfileScreen() {
       const cpf = cpfRaw || profile?.cpf;
       if (!cpf) return;
       const cpfLimpo = String(cpf).replace(/\D/g, "");
-      const res = await HEMOSE.getAgendamentosByCPF(cpfLimpo);
-      const apiAgs = Array.isArray(res) ? res : (res?.data || []);
+
+      // 1. Buscar agendamentos da API HEMOSE
+      let apiAgs: any[] = [];
+      try {
+        const res = await HEMOSE.getAgendamentosByCPF(cpfLimpo);
+        apiAgs = Array.isArray(res) ? res : (res?.data || []);
+      } catch (apiError: any) {
+        // Se retornar 400, significa que não há agendamentos (normal para usuários novos)
+        if (apiError.response?.status === 400) {
+          console.log("ℹ️ Usuário não possui agendamentos na API HEMOSE");
+          apiAgs = [];
+        } else {
+          throw apiError;
+        }
+      }
+
+      // 2. Buscar agendamentos de CAMPANHA salvos localmente
       const localAgs = await HEMOSE.getLocalCampaignAgendamentos(cpfLimpo);
-      const ags = [...(Array.isArray(apiAgs) ? apiAgs : []), ...(Array.isArray(localAgs) ? localAgs : [])];
+      console.log("💾 [AGENDAMENTOS-LOCAL] Campanhas locais encontradas:", localAgs.length);
+
+      // Combinar: API HEMOSE + Campanhas Locais
+      const ags = [
+        ...(Array.isArray(apiAgs) ? apiAgs : []),
+        ...(Array.isArray(localAgs) ? localAgs : []),
+      ];
+
       // Filtra agendamentos futuros/ativos
       const hoje = new Date();
       const futuros = ags.filter((a: any) => {
@@ -158,6 +180,7 @@ export default function ProfileScreen() {
         // considera agendamentos não cancelados e com data >= hoje
         return d >= new Date(hoje.toDateString()) && !situacao.includes("cancel");
       });
+
       if (futuros.length > 0) {
         setHasScheduled(true);
         setUpcomingAgendamento(futuros[0]);
@@ -167,6 +190,9 @@ export default function ProfileScreen() {
       }
     } catch (err) {
       console.error("❌ Erro ao carregar agendamentos no perfil:", err);
+      // Se der erro, considera como sem agendamentos
+      setHasScheduled(false);
+      setUpcomingAgendamento(null);
     }
   };
 

@@ -112,7 +112,7 @@ export default function DonationCharts({ analytics }: DonationChartsProps) {
               {Math.round(
                 (analytics.monthlyStats.reduce((sum, s) => sum + s.count, 0) /
                   12) *
-                  10
+                10
               ) / 10}
             </Text>
             <Text style={styles.statLabel}>Média/mês</Text>
@@ -212,12 +212,10 @@ export default function DonationCharts({ analytics }: DonationChartsProps) {
               />
               <Text style={styles.comparisonText}>
                 {analytics.donationsThisYear >= analytics.donationsLastYear
-                  ? `+${
-                      analytics.donationsThisYear - analytics.donationsLastYear
-                    }`
-                  : `${
-                      analytics.donationsThisYear - analytics.donationsLastYear
-                    }`}{" "}
+                  ? `+${analytics.donationsThisYear - analytics.donationsLastYear
+                  }`
+                  : `${analytics.donationsThisYear - analytics.donationsLastYear
+                  }`}{" "}
                 doações vs. ano anterior
               </Text>
             </View>
@@ -352,13 +350,13 @@ export default function DonationCharts({ analytics }: DonationChartsProps) {
             <Text style={styles.statCardValue}>
               {analytics.lastDonationDate
                 ? new Date(analytics.lastDonationDate).toLocaleDateString(
-                    "pt-BR",
-                    {
-                      day: "2-digit",
-                      month: "2-digit",
-                      year: "2-digit",
-                    }
-                  )
+                  "pt-BR",
+                  {
+                    day: "2-digit",
+                    month: "2-digit",
+                    year: "2-digit",
+                  }
+                )
                 : "Nunca"}
             </Text>
             <Text style={styles.statCardLabel}>Última Doação</Text>

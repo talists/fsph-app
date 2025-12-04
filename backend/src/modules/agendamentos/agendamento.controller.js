@@ -69,6 +69,7 @@ export const AgendamentoController = {
     try {
       res.json(await AgendamentoService.getAgendamentosFSPH(req.params.cpf));
     } catch (err) {
+      console.error(`❌ Erro ao buscar agendamentos para CPF ${req.params.cpf}:`, err.message);
       res.status(500).json({ msg: err.message });
     }
   },

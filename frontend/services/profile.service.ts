@@ -55,9 +55,10 @@ class ProfileService {
 
   async changePassword(currentPassword: string, newPassword: string): Promise<void> {
     try {
-      await apiService.post("/usuarios/change-password", {
-        currentPassword,
-        newPassword,
+      // Usa a rota correta do backend: PATCH /auth/alterar-senha
+      await apiService.patch("/auth/alterar-senha", {
+        senhaAtual: currentPassword,
+        novaSenha: newPassword,
       });
     } catch (err: any) {
       if (isAxiosError(err) && err.response) {

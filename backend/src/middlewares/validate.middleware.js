@@ -25,7 +25,7 @@ export const validateBody = (schema) => async (req, res, next) => {
 
     return next();
   } catch (error) {
-    if (error instanceof ZodError) {
+    if (error instanceof ZodError && error.errors && Array.isArray(error.errors)) {
       console.error("❌ [VALIDATE] Erro de validação Zod:");
       console.error("Erros:", JSON.stringify(error.errors, null, 2));
 

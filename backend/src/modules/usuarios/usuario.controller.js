@@ -50,6 +50,48 @@ export class UsuarioController {
     }
   }
 
+  /**
+   * Atualiza o perfil do usuário logado (sem precisar passar ID na URL)
+   * @route PATCH /api/usuarios/meu-perfil
+   */
+  static async updateMeuPerfil(req, res) {
+    try {
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      console.log("🎯 [CONTROLLER] Atualizando meu perfil...");
+      console.log("🆔 User ID:", req.user.id);
+      console.log("📦 Body recebido:", JSON.stringify(req.body, null, 2));
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+      const result = await UsuarioService.update(req.user.id, req.body, req.file);
+      res.json(result);
+    } catch (err) {
+      console.error("❌ [CONTROLLER] Erro ao atualizar perfil:", err.message);
+      res.status(400).json({ msg: err.message });
+    }
+  }
+
+  /**
+   * Upload de foto de perfil do usuário logado
+   * @route POST /api/usuarios/meu-perfil/foto
+   */
+  static async uploadFotoPerfil(req, res) {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ msg: "Nenhuma foto enviada" });
+      }
+
+      console.log("📸 [CONTROLLER] Upload de foto de perfil...");
+      console.log("🆔 User ID:", req.user.id);
+      console.log("📁 File:", req.file.filename);
+
+      const result = await UsuarioService.update(req.user.id, {}, req.file);
+      res.json(result);
+    } catch (err) {
+      console.error("❌ [CONTROLLER] Erro ao fazer upload:", err.message);
+      res.status(400).json({ msg: err.message });
+    }
+  }
+
   static async update(req, res) {
     try {
       console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");

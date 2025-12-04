@@ -9,10 +9,10 @@ const router = express.Router();
 
 router.get("/", verifyToken, CampanhaController.getAll);
 router.post("/", verifyToken, CampanhaController.create);
+// ⚠️ IMPORTANTE: Rotas específicas ANTES de rotas com parâmetro dinâmico /:id
+router.get("/minhas-campanhas", verifyToken, CampanhaController.getByUsuario);
 router.get("/:id", verifyToken, CampanhaController.getById);
 router.patch("/:id", verifyToken, CampanhaController.update);
 router.delete("/:id", verifyToken, CampanhaController.remove);
-// Rota para um usuário listar suas próprias campanhas
-router.get("/minhas-campanhas", verifyToken, CampanhaController.getByUsuario);
 
 export default router;

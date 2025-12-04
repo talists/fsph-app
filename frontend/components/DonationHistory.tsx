@@ -53,9 +53,10 @@ export default function DonationHistory({
     try {
       // Use CPF from user context or a provided userId
       const cpf = user?.cpf || userId || "";
+      const bloodType = user?.tipo_sanguineo || "O+";
 
-      // Fetch donations from HEMOSE API
-      const allDonations = await donationsService.fetchDonationHistory(cpf);
+      // Fetch donations from local backend database
+      const allDonations = await donationsService.fetchDonationHistory(cpf, bloodType);
 
       // Filter donations based on selected period
       const now = new Date();

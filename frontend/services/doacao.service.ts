@@ -6,6 +6,7 @@
 
 import * as Notifications from "expo-notifications";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { apiService } from "./api";
 import {
   getDoadorInfoByCPF,
   getAgendamentosByCPF,
@@ -75,66 +76,59 @@ class DonationsService {
   }
 
   /**
-   * Fetch donation history from HEMOSE API
+   * Fetch donation history from local backend database
+   * O histórico é salvo no banco local, não na API HEMOSE
    */
-  async fetchDonationHistory(cpfRaw: string): Promise<DonationRecord[]> {
-    // 1. Limpeza: Remove tudo que não for número (pontos, traços, espaços)
-    const cpf = cpfRaw ? cpfRaw.replace(/\D/g, "") : "";
-
-    // 2. Validação: Se não tiver 11 dígitos, nem tenta buscar na API
-    if (!cpf || cpf.length !== 11) {
-      console.warn(
-        "⚠️ fetchDonationHistory ignorado: CPF inválido ou vazio:",
-        cpfRaw
-      );
-      // Retorna cache ou array vazio para não quebrar a tela
-      return this.getCachedDonations(cpf || "unknown");
-    }
-
+  async fetchDonationHistory(cpfRaw: string, bloodType?: string): Promise<DonationRecord[]> {
     try {
-      console.log("🩸 Buscando histórico para CPF (limpo):", cpf);
+      console.log("🩸 Buscando histórico de doações do backend local...");
 
-      const [doadorInfo, agendamentos] = await Promise.all([
-        getDoadorInfoByCPF(cpf),
-        getAgendamentosByCPF(cpf),
-      ]);
+      // Busca o histórico do banco de dados local via API autenticada
+      const response = await apiService.get("/doacoes/meu-historico");
+      const doacoesBackend = response.data || [];
 
-      // ... resto do código (processamento dos dados) continua igual ...
+      console.log(`✅ Recebido ${doacoesBackend.length} doações do backend`);
 
-      const donations: DonationRecord[] = [];
-      // (Mantenha sua lógica de mapeamento aqui)
-      if (agendamentos && Array.isArray(agendamentos)) {
-        agendamentos.forEach((agendamento: any, index: number) => {
-          const donation: DonationRecord = {
-            id: agendamento.id?.toString() || `hemose_${index}`,
-            date: this.formatDate(
-              agendamento.data_agendamento || agendamento.date
-            ),
-            location: agendamento.local_nome || "HEMOSE - Aracaju",
-            bloodType: doadorInfo?.tipo_sanguineo || "O+",
-            volume: 450,
-            status: this.mapStatus(agendamento.status || agendamento.situacao),
-            notes: agendamento.observacoes || agendamento.notes,
-            protocol: agendamento.protocolo || agendamento.protocol,
-            type: this.mapDonationType(agendamento.tipo || "D"),
-          };
-          donations.push(donation);
-        });
-      }
+      // Mapeia as doações do backend para o formato DonationRecord
+      const donations: DonationRecord[] = doacoesBackend.map((doacao: any, index: number) => ({
+        id: doacao.id?.toString() || `local_${index}`,
+        date: this.formatDate(doacao.data_doacao),
+        location: doacao.posto_coleta?.nome || "HEMOSE - Aracaju",
+        bloodType: bloodType || "O+",
+        volume: 450,
+        status: "completed" as const,
+        notes: doacao.tipo_doacao || "Doação de sangue",
+        protocol: `DOA-${doacao.id}`,
+        type: "individual" as const,
+      }));
 
+      // Ordenar por data mais recente
       donations.sort(
         (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
       );
 
-      await this.cacheDonations(cpf, donations);
+      console.log(`🩸 Total de doações processadas: ${donations.length}`);
+
+      // Salva no cache local
+      const cpf = cpfRaw ? cpfRaw.replace(/\D/g, "") : "unknown";
+      if (donations.length > 0) {
+        await this.cacheDonations(cpf, donations);
+      }
+
       return donations;
-    } catch (error) {
-      // O erro 500 vai cair aqui
-      console.warn(
-        "⚠️ Falha ao buscar no HEMOSE (API Offline ou CPF não encontrado), usando cache."
-        // error
-      );
-      return this.getCachedDonations(cpf);
+    } catch (error: any) {
+      console.warn("⚠️ Erro ao buscar histórico do backend:", error?.message);
+
+      // Fallback para cache local
+      const cpf = cpfRaw ? cpfRaw.replace(/\D/g, "") : "unknown";
+      const cached = await this.getCachedDonations(cpf);
+      if (cached.length > 0) {
+        console.log(`📦 Usando ${cached.length} doações do cache`);
+        return cached;
+      }
+
+      // Se não tem cache, retorna mock para demonstração
+      return this.getMockDonations();
     }
   }
 
@@ -153,8 +147,8 @@ class DonationsService {
       console.error("Error reading cached donations:", error);
     }
 
-    // Return mock data if no cache available
-    return this.getMockDonations();
+    // Return empty array - mock will be handled by caller
+    return [];
   }
 
   /**

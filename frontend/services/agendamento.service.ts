@@ -104,6 +104,20 @@ export async function removeLocalCampaignAgendamento(cpf: string, protocolo: str
   }
 }
 
+// Limpa TODOS os agendamentos locais de um CPF (útil para resetar o cache)
+export async function clearAllLocalAgendamentos(cpf: string) {
+  try {
+    const cpfLimpo = String(cpf).replace(/\D/g, "");
+    const key = `${LOCAL_AGENDAMENTOS_KEY_PREFIX}${cpfLimpo}`;
+    await AsyncStorage.removeItem(key);
+    console.log("🗑️ [AGENDAMENTOS-LOCAL] Todos os agendamentos locais removidos para CPF", cpfLimpo);
+    return true;
+  } catch (e) {
+    console.error("❌ Erro ao limpar agendamentos locais:", e);
+    return false;
+  }
+}
+
 // --- Fluxo de Agendamento (Via Backend) ---
 export async function listarCidades(tipo: TipoAgendamento) {
   const { perm_individual, perm_medula, perm_campanha } = tipoToPerm(tipo);

@@ -241,7 +241,9 @@ export default function FAQScreen() {
         } finally {
             setIsSubmitting(false);
         }
-    }; const renderAnswer = (answer: string | string[]) => {
+    };
+
+    const renderAnswer = (answer: string | string[]) => {
         if (Array.isArray(answer)) {
             return (
                 <View style={styles.answerContainer}>
@@ -380,7 +382,9 @@ export default function FAQScreen() {
                                 </View>
                             ))
                         )}
-                    </View>                    {/* User Question Section */}
+                    </View>
+
+                    {/* User Question Section */}
                     <View style={styles.userQuestionSection}>
                         <View style={styles.userQuestionHeader}>
                             <Ionicons name="help-circle-outline" size={24} color="#E73645" />

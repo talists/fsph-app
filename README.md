@@ -150,59 +150,6 @@ npx expo start
 
 ---
 
-## 🔌 API Endpoints
-
-### Autenticação
-| Método | Endpoint | Descrição |
-|--------|----------|-----------|
-| POST | `/auth/login` | Login com email/senha |
-| POST | `/auth/register` | Cadastro de usuário |
-| POST | `/auth/google` | Login com Google |
-| POST | `/auth/refresh-token` | Renovar token JWT |
-
-### Usuários
-| Método | Endpoint | Descrição |
-|--------|----------|-----------|
-| GET | `/usuarios/meu-perfil` | Dados do usuário logado |
-| PATCH | `/usuarios/meu-perfil` | Atualizar perfil |
-| POST | `/usuarios/meu-perfil/foto` | Upload foto de perfil |
-| PATCH | `/usuarios/fcm-token` | Atualizar token FCM |
-
-### Agendamentos (Proxy HEMOSE)
-| Método | Endpoint | Descrição |
-|--------|----------|-----------|
-| GET | `/agendamentos/apiagendamento/doador/getinfo/:cpf` | Info do doador |
-| GET | `/agendamentos/apiagendamento/doador/agendamentos/:cpf` | Agendamentos ativos |
-| GET | `/agendamentos/apiagendamento/cidades/:perm/:perm/:perm` | Listar cidades |
-| GET | `/agendamentos/apiagendamento/local/:cidade/:perm/:perm/:perm` | Listar locais |
-| GET | `/agendamentos/apiagendamento/blocoagendamento/listarByDate/:data/:local/:perm/:perm/:perm` | Horários disponíveis |
-| POST | `/agendamentos/apiagendamento/agendamento/marcar` | Marcar agendamento |
-| DELETE | `/agendamentos/apiagendamento/agendamento/desmarcar/:protocolo` | Cancelar agendamento |
-
-### Banco de Sangue
-| Método | Endpoint | Descrição |
-|--------|----------|-----------|
-| GET | `/bancodesangue/estoque` | Níveis de estoque atuais |
-
-### Doações
-| Método | Endpoint | Descrição |
-|--------|----------|-----------|
-| GET | `/doacoes/meu-historico` | Histórico do usuário |
-
-### Feed
-| Método | Endpoint | Descrição |
-|--------|----------|-----------|
-| GET | `/feed` | Lista de posts |
-| POST | `/feed` | Criar post (admin) |
-
-### Notificações
-| Método | Endpoint | Descrição |
-|--------|----------|-----------|
-| GET | `/notificacoes` | Notificações do usuário |
-| PATCH | `/notificacoes/:id/lida` | Marcar como lida |
-
----
-
 ## 🎯 Funcionalidades Implementadas
 
 ### ✅ Autenticação
@@ -241,7 +188,7 @@ npx expo start
 - [x] Sistema de likes
 - [x] Compartilhamento
 
-### ✅ Campanhas
+### ✅ Campanhas (Falta API OFICIAL)
 - [x] Listagem de campanhas ativas
 - [x] Detalhes e participação
 
@@ -251,63 +198,16 @@ npx expo start
 
 ---
 
-## 🔧 Variáveis de Ambiente
-
-### Backend (.env)
-```env
-# Banco de Dados
-DB_HOST=localhost
-DB_PORT=3307
-DB_USER=root
-DB_PASSWORD=sua_senha
-DB_NAME=fsph_db
-
-# Redis
-REDIS_HOST=localhost
-REDIS_PORT=6380
-
-# JWT
-JWT_SECRET=sua_chave_secreta
-JWT_EXPIRES_IN=1h
-JWT_REFRESH_EXPIRES_IN=30d
-
-# Cloudflare R2
-CLOUDFLARE_ACCOUNT_ID=seu_account_id
-CLOUDFLARE_ACCESS_KEY_ID=sua_access_key
-CLOUDFLARE_SECRET_ACCESS_KEY=sua_secret_key
-CLOUDFLARE_BUCKET_NAME=seu_bucket
-CLOUDFLARE_PUBLIC_URL=https://seu-bucket.r2.dev
-
-# Firebase (Push Notifications)
-FIREBASE_PROJECT_ID=seu_projeto
-FIREBASE_PRIVATE_KEY=sua_chave_privada
-FIREBASE_CLIENT_EMAIL=seu_email
-```
-
-### Frontend (.env)
-```env
-EXPO_PUBLIC_API_URL=http://SEU_IP:3334/api
-EXPO_PUBLIC_API_TIMEOUT=30000
-```
-
----
-
 ## 👥 Equipe
 
-Desenvolvido por estudantes do IFS (Instituto Federal de Sergipe) em parceria com a FSPH/HEMOSE.
+Desenvolvido por estudantes da Universidade Tiradente (UNIT) em parceria com a FSPH/HEMOSE.
+
+UI/UX: Laiza, Lauro, Larissa
+
+Front - React Native: Emily, Bernardo, João, Larissa, Lauro 
+
+Back - Node.js: Talita, Erick, Lauro, Larissa
+
+BD - MySQL: Laiza, Talita, William, Larissa
 
 ---
-
-## 📄 Licença
-
-Este projeto é propriedade da **Fundação de Saúde Parreiras Horta (FSPH)** e do **Hemocentro de Sergipe (HEMOSE)**.
-
----
-
-## 🤝 Contribuição
-
-1. Faça um fork do projeto
-2. Crie uma branch para sua feature (`git checkout -b feature/nova-feature`)
-3. Commit suas mudanças (`git commit -m 'Adiciona nova feature'`)
-4. Push para a branch (`git push origin feature/nova-feature`)
-5. Abra um Pull Request
